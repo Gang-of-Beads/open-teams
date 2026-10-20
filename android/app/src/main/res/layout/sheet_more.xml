@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="8dp"
+    android:paddingBottom="16dp">
+
+    <TextView
+        android:id="@+id/more_files"
+        style="@style/SheetRow"
+        android:drawableStart="@drawable/ic_folder"
+        android:text="@string/nav_files" />
+
+    <TextView
+        android:id="@+id/more_join"
+        style="@style/SheetRow"
+        android:drawableStart="@drawable/ic_video_call"
+        android:text="@string/join_meeting" />
+
+    <TextView
+        android:id="@+id/more_dial"
+        style="@style/SheetRow"
+        android:drawableStart="@drawable/ic_dialpad"
+        android:text="@string/call_number" />
+
+    <TextView
+        android:id="@+id/more_reload"
+        style="@style/SheetRow"
+        android:drawableStart="@drawable/ic_refresh"
+        android:text="@string/reload" />
+
+    <TextView
+        android:id="@+id/more_settings"
+        style="@style/SheetRow"
+        android:drawableStart="@drawable/ic_settings"
+        android:text="@string/settings" />
+</LinearLayout>

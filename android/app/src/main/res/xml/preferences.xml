@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/pref_account">
+        <ListPreference
+            app:defaultValue="https://teams.cloud.microsoft"
+            app:entries="@array/teams_url_names"
+            app:entryValues="@array/teams_url_values"
+            app:key="teams_url"
+            app:title="@string/pref_teams_url"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="custom_teams_url"
+            app:summary="@string/pref_custom_url_summary"
+            app:title="@string/pref_custom_url" />
+        <Preference
+            app:key="sign_out"
+            app:title="@string/sign_out" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/pref_calls">
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="telecom"
+            app:summary="@string/pref_telecom_summary"
+            app:title="@string/pref_telecom" />
+        <Preference
+            app:key="full_screen_calls"
+            app:summary="@string/pref_full_screen_summary"
+            app:title="@string/pref_full_screen" />
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="disable_autogain"
+            app:title="@string/pref_disable_autogain" />
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="speaking_indicator"
+            app:title="@string/pref_speaking_indicator" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/pref_notifications">
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="message_notifications"
+            app:title="@string/pref_message_notifications" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="keep_alive"
+            app:summary="@string/pref_keep_alive_summary"
+            app:title="@string/pref_keep_alive" />
+        <Preference
+            app:key="battery"
+            app:summary="@string/pref_battery_summary"
+            app:title="@string/pref_battery" />
+        <Preference
+            app:key="notification_settings"
+            app:title="@string/pref_notification_settings" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/pref_display">
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="native_navigation"
+            app:summary="@string/pref_native_navigation_summary"
+            app:title="@string/pref_native_navigation" />
+        <ListPreference
+            app:defaultValue="0"
+            app:entries="@array/viewport_names"
+            app:entryValues="@array/viewport_values"
+            app:key="viewport_width"
+            app:title="@string/pref_viewport"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:defaultValue="linux"
+            app:entries="@array/identity_names"
+            app:entryValues="@array/identity_values"
+            app:key="browser_identity"
+            app:title="@string/pref_identity"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="follow_system_theme"
+            app:title="@string/pref_follow_theme" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/pref_about">
+        <Preference
+            app:key="about"
+            app:title="@string/app_name" />
+    </PreferenceCategory>
+</PreferenceScreen>

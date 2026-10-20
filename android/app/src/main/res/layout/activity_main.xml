@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
+
+    <LinearLayout
+        android:id="@+id/content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:id="@+id/web_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top"
+                android:indeterminate="true"
+                android:visibility="gone"
+                app:indicatorColor="@color/brand" />
+        </FrameLayout>
+
+        <!-- In-call controls, after the native call screen: video, mic, audio route, share, hand, end. -->
+        <LinearLayout
+            android:id="@+id/call_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="8dp"
+            android:background="@drawable/call_bar_background"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:padding="6dp"
+            android:visibility="gone">
+
+            <ImageButton
+                android:id="@+id/call_video"
+                style="@style/CallBarButton"
+                android:contentDescription="@string/toggle_video"
+                android:src="@drawable/ic_videocam_off" />
+
+            <ImageButton
+                android:id="@+id/call_mic"
+                style="@style/CallBarButton"
+                android:contentDescription="@string/mute"
+                android:src="@drawable/ic_mic" />
+
+            <ImageButton
+                android:id="@+id/call_audio"
+                style="@style/CallBarButton"
+                android:contentDescription="@string/audio_route"
+                android:src="@drawable/ic_volume_up" />
+
+            <ImageButton
+                android:id="@+id/call_share"
+                style="@style/CallBarButton"
+                android:contentDescription="@string/share_screen"
+                android:src="@drawable/ic_screen_share" />
+
+            <ImageButton
+                android:id="@+id/call_hand"
+                style="@style/CallBarButton"
+                android:contentDescription="@string/raise_hand"
+                android:src="@drawable/ic_pan_tool" />
+
+            <ImageButton
+                android:id="@+id/call_hang_up"
+                style="@style/CallBarButton"
+                android:background="@drawable/hang_up_background"
+                android:contentDescription="@string/hang_up"
+                android:src="@drawable/ic_call_end" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/bottom_nav"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/bottom_bar_height"
+            android:background="?attr/colorSurfaceContainer"
+            android:orientation="horizontal" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/fullscreen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:visibility="gone" />
+</FrameLayout>

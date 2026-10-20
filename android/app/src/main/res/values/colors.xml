@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Teams' design tokens as observed in the native app (fluentcolor_tms_*). -->
+    <color name="brand">#5B5FC7</color>
+    <color name="brand_container">#DCE0FA</color>
+    <color name="decline">#C4314B</color>
+    <color name="call_stage">#252424</color>
+    <color name="call_bar">#E62B2B2B</color>
+    <color name="nav_inactive">#616161</color>
+</resources>

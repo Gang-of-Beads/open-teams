@@ -63,7 +63,8 @@ class SpeakingIndicator {
 
 	init(config, ipcRenderer) {
 		const overlayEnabled = config.media?.microphone?.speakingIndicator === true;
-		const mqttEnabled = config.mqtt?.enabled === true || (process.platform === 'linux' && config.dbusControl?.enabled === true);
+		// The Android app (android/) drives its native call notification from these events.
+		const mqttEnabled = config.mqtt?.enabled === true || (process.platform === 'linux' && config.dbusControl?.enabled === true) || process.platform === 'android';
 
 		if (!overlayEnabled && !mqttEnabled) {
 			return;

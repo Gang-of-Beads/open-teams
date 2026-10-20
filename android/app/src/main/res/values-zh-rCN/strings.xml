@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings">设置</string>
+    <string name="close">关闭</string>
+    <string name="quit">退出</string>
+
+    <string name="nav_activity">活动</string>
+    <string name="nav_chat">聊天</string>
+    <string name="nav_teams">团队</string>
+    <string name="nav_calendar">日历</string>
+    <string name="nav_calls">通话</string>
+    <string name="nav_more">更多</string>
+    <string name="nav_files">文件</string>
+
+    <string name="join_meeting">加入会议</string>
+    <string name="join">加入</string>
+    <string name="meeting_link_or_id">会议链接或会议 ID</string>
+    <string name="passcode_optional">密码（可选）</string>
+    <string name="invalid_meeting">请输入 Teams 会议链接或会议 ID</string>
+    <string name="call_number">拨打电话号码</string>
+    <string name="phone_number">电话号码</string>
+    <string name="call">呼叫</string>
+    <string name="reload">重新加载</string>
+
+    <string name="teams_call">Teams 通话</string>
+    <string name="incoming_teams_call">Microsoft Teams 来电</string>
+    <string name="unknown_caller">未知来电</string>
+    <string name="answer">接听</string>
+    <string name="answer_video">视频</string>
+    <string name="decline">拒绝</string>
+    <string name="hang_up">挂断</string>
+    <string name="mute">静音</string>
+    <string name="unmute">取消静音</string>
+    <string name="toggle_video">打开或关闭摄像头</string>
+    <string name="audio_route">音频输出</string>
+    <string name="share_screen">共享屏幕</string>
+    <string name="stop_sharing">停止共享</string>
+    <string name="raise_hand">举手</string>
+    <string name="route_phone">听筒</string>
+    <string name="route_speaker">扬声器</string>
+    <string name="route_headset">耳机</string>
+    <string name="route_bluetooth">蓝牙</string>
+
+    <string name="channel_messages">消息</string>
+    <string name="channel_incoming_calls">来电</string>
+    <string name="channel_ongoing_calls">通话中</string>
+    <string name="channel_background">后台连接</string>
+    <string name="background_title">Open Teams 已连接</string>
+    <string name="background_text">在后台接收来电和消息</string>
+
+    <string name="no_app_for_link">没有可以打开此链接的应用</string>
+    <string name="downloading">正在下载 %1$s</string>
+    <string name="downloaded">已将 %1$s 保存到“下载”</string>
+    <string name="download_failed">下载失败</string>
+    <string name="webview_too_old">Open Teams 需要更新版本的 Android System WebView，请在应用商店中更新后重试。</string>
+
+    <string name="pref_account">账户</string>
+    <string name="pref_teams_url">Teams 服务</string>
+    <string name="pref_custom_url">自定义 Teams 地址</string>
+    <string name="pref_custom_url_summary">覆盖上面的服务，例如 GovCloud 或代理地址（仅 https://）</string>
+    <string name="sign_out">退出登录并清除数据</string>
+    <string name="sign_out_confirm">退出 Teams 并删除 Cookie、缓存和本地数据？</string>
+    <string name="pref_calls">通话和会议</string>
+    <string name="pref_telecom">系统通话集成</string>
+    <string name="pref_telecom_summary">把 Teams 通话注册到系统，使蓝牙耳机、车载设备和手机来电都能与之配合</string>
+    <string name="pref_full_screen">全屏来电</string>
+    <string name="pref_full_screen_summary">允许来电界面显示在锁屏之上</string>
+    <string name="pref_disable_autogain">关闭麦克风自动增益</string>
+    <string name="pref_speaking_indicator">显示说话指示器</string>
+    <string name="pref_notifications">通知</string>
+    <string name="pref_message_notifications">消息通知</string>
+    <string name="pref_keep_alive">后台保持连接</string>
+    <string name="pref_keep_alive_summary">保持 Teams 运行，关闭应用后也能响铃和接收消息</string>
+    <string name="pref_battery">电池优化</string>
+    <string name="pref_battery_summary">将 Open Teams 排除在外，避免系统断开连接</string>
+    <string name="pref_notification_settings">系统通知设置</string>
+    <string name="pref_display">显示</string>
+    <string name="pref_native_navigation">原生导航栏</string>
+    <string name="pref_native_navigation_summary">像 Teams 应用一样使用底部标签，替代网页左侧栏</string>
+    <string name="pref_viewport">页面宽度</string>
+    <string name="pref_identity">浏览器标识</string>
+    <string name="pref_follow_theme">跟随系统深色模式</string>
+    <string name="pref_about">关于</string>
+    <string name="about_summary">版本 %1$s。open-teams（Teams for Linux）的 Android 版，GPL-3.0-or-later。与 Microsoft 无关。</string>
+
+    <string-array name="teams_url_names">
+        <item>工作或学校</item>
+        <item>工作或学校（teams.microsoft.com）</item>
+        <item>个人（teams.live.com）</item>
+        <item>GCC High</item>
+        <item>DoD</item>
+    </string-array>
+    <string-array name="viewport_names">
+        <item>适应屏幕</item>
+        <item>平板（768 px）</item>
+        <item>桌面（1024 px）</item>
+        <item>宽屏桌面（1280 px）</item>
+    </string-array>
+    <string-array name="identity_names">
+        <item>Linux 上的 Chrome</item>
+        <item>Windows 上的 Chrome</item>
+    </string-array>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A pill in the call bar, a circle on the square ringing-screen button. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#33FFFFFF">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/decline" />
+            <corners android:radius="48dp" />
+        </shape>
+    </item>
+</ripple>

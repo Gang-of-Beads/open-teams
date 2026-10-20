@@ -9,6 +9,7 @@ export default [
       ".claude/", "dist/", "docs-site/build/", "docs-site/.docusaurus/",
       "test-results/", "playwright-report/",
       "parts/", ".flatpak-builder/", "flatpak-build/", "snap/.snapcraft/",
+      "android/**/build/", "android/.gradle/",
     ],
   },
   { files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },

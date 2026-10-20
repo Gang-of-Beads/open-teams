@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.OpenTeams" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand</item>
+        <item name="colorSecondary">@color/brand</item>
+        <item name="colorPrimaryContainer">@color/brand_container</item>
+    </style>
+
+    <style name="Theme.OpenTeams.Call" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/brand</item>
+        <item name="android:windowBackground">@color/call_stage</item>
+        <item name="android:statusBarColor">@color/call_stage</item>
+        <item name="android:navigationBarColor">@color/call_stage</item>
+    </style>
+
+    <style name="Theme.OpenTeams.Popup" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowIsFloating">false</item>
+    </style>
+
+    <style name="CircleShape">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
+    <style name="CallBarButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginHorizontal">2dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">center</item>
+        <item name="tint">@android:color/white</item>
+    </style>
+
+    <style name="IncomingAction">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="IncomingButton">
+        <item name="android:layout_width">72dp</item>
+        <item name="android:layout_height">72dp</item>
+        <item name="android:scaleType">center</item>
+        <item name="tint">@android:color/white</item>
+    </style>
+
+    <style name="IncomingLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="SheetRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:drawablePadding">24dp</item>
+        <item name="android:drawableTint">?attr/colorOnSurfaceVariant</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingHorizontal">24dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyLarge</item>
+    </style>
+</resources>
