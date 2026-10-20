@@ -9,6 +9,7 @@
 /* Begin PBXFileReference section */
 		AA0000000000000000000003 /* OpenTeams.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenTeams.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000011 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		AA0000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -51,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000011 /* Signing.xcconfig */,
+				AA0000000000000000000012 /* Info.plist */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -186,6 +188,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Open Teams";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Teams uses the camera for video calls and meetings.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Teams uses the microphone for calls and meetings.";
@@ -213,6 +216,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Open Teams";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Teams uses the camera for video calls and meetings.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Teams uses the microphone for calls and meetings.";

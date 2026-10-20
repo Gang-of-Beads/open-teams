@@ -9,12 +9,22 @@ final class TeamsViewController: UIViewController {
     private var popups: [WKWebView: PopupViewController] = [:]
     private var downloadDestinations: [WKDownload: URL] = [:]
     private var lastAutomaticReload: Date?
+    private let notificationBridge = NotificationBridge()
+    private let keepAlive = BackgroundKeepAlive()
+    private var cookiePathFixer: CookiePathFixer?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
 
-        webView = makeWebView(configuration: Self.makeConfiguration())
+        let configuration = Self.makeConfiguration()
+        cookiePathFixer = CookiePathFixer(store: configuration.websiteDataStore.httpCookieStore)
+        notificationBridge.install(in: configuration.userContentController)
+        keepAlive.install(in: configuration.userContentController)
+        webView = makeWebView(configuration: configuration)
+        notificationBridge.webView = webView
+        notificationBridge.requestAuthorization()
+        keepAlive.start(webView: webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
         NSLayoutConstraint.activate([

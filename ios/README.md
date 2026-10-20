@@ -85,15 +85,47 @@ this to one year.
   permission prompt.
 - Downloaded files are offered through the share sheet (Save to Files,
   AirDrop, open in another app).
+- Profile pictures: Teams sets its avatar cookie with a relative `Path`,
+  which Chromium tolerates but WebKit stores literally and never sends, so
+  every avatar request fails with 401. The app copies such Teams cookies to
+  `Path=/` whenever the cookie store changes. After the first sign-in,
+  avatars appear from the next launch (or after a reload).
 - Debug builds can be inspected with Safari > Develop on a Mac.
+
+## Notifications and running in the background
+
+`WKWebView` has no Web Notifications API, so the app injects a replacement
+`window.Notification` before Teams loads (the same idea as the desktop app's
+`app/browser/preload.js`). Each Teams notification becomes an iOS
+notification; tapping it opens the app and runs Teams' own click handler, which
+opens the conversation. The unread count from the page title (`(3) Chat |
+Microsoft Teams`) is mirrored onto the app icon badge. iOS asks for permission
+on first launch; you can change it later in Settings > Notifications > Open
+Teams.
+
+iOS normally suspends a web view about a second after the app leaves the
+foreground, which would stop Teams and all notifications. To keep it running,
+the page loops a silent audio clip and the app declares the `audio` background
+mode. Things to know:
+
+- **Battery**: Teams keeps running in the background, so expect noticeably
+  higher battery use than an app that relies on push notifications.
+- **Force-quitting stops it.** Swiping the app away in the app switcher ends
+  the session; nothing arrives until you open it again. There is no push
+  service behind this app.
+- The audio session is mixable, so music from other apps keeps playing. A phone
+  call or another app taking exclusive audio can pause the clip; it resumes
+  when the app becomes active again.
+- The `audio` background mode for silent playback is fine for sideloading but
+  would not pass App Store review.
 
 ## Known limitations
 
-- **No notifications.** `WKWebView` does not support the Web Notifications or
-  Push APIs, so messages and calls do not alert you while the app is not in
-  the foreground.
-- **No background calls.** iOS suspends the web view shortly after the app
-  leaves the foreground, which ends audio and video in an active meeting.
+- **Notifications need the app running.** They come from the Teams page
+  itself, not a push service, so nothing arrives after the app is force-quit
+  or killed by iOS (see above).
+- **Calls in the background are untested.** The keep-alive should keep meeting
+  audio going, but iOS stops camera capture for backgrounded apps.
 - **No screen sharing.** `getDisplayMedia` is not available in `WKWebView` on
   iOS.
 - Microsoft can change Teams web at any time; if it starts rejecting this user
@@ -108,4 +140,8 @@ this to one year.
 | `OpenTeams/TeamsViewController.swift` | Web view setup, navigation, popups, permissions, downloads |
 | `OpenTeams/PopupViewController.swift` | Sheet used for `window.open()` popups |
 | `OpenTeams/TeamsConfig.swift` | Start URL, user agent and trusted Microsoft hosts |
+| `OpenTeams/NotificationBridge.swift` | `window.Notification` shim, iOS notifications, app icon badge |
+| `OpenTeams/CookiePathFixer.swift` | Copies Teams cookies with a relative path to `/` so profile pictures load |
+| `OpenTeams/BackgroundKeepAlive.swift` | Silent audio loop that keeps the page running in the background |
+| `Config/Info.plist` | Keys build settings cannot generate (`UIBackgroundModes`) |
 | `Config/Signing.xcconfig` | Signing defaults, includes the optional `Local.xcconfig` |
