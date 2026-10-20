@@ -20,6 +20,25 @@ share code with the desktop app under `app/`, and none of the desktop features
 - To install on a physical device: an Apple ID added in Xcode > Settings >
   Accounts. A free Personal Team is enough for your own devices.
 
+## Download a prebuilt ipa
+
+The [iOS workflow](../.github/workflows/ios.yml) builds an unsigned `.ipa` for
+every pull request and push to `main` that touches `ios/` (download it from
+the run's `ios-ipa` artifact). Tags named `ios-vX.Y.Z` publish it as a GitHub
+pre-release, named "iOS X.Y.Z", with a SHA-256 checksum.
+
+The ipa is unsigned: install it with [SideStore](https://sidestore.io),
+AltStore or Sideloadly, which re-sign it with your Apple ID. With a free
+Apple ID the app must be refreshed every 7 days, and at most 3 sideloaded
+apps (including SideStore itself) can be active at once.
+
+To publish a release:
+
+```bash
+git tag ios-v0.1.0
+git push origin ios-v0.1.0
+```
+
 ## Build and run in the simulator
 
 Open `ios/OpenTeams.xcodeproj` in Xcode, pick an iPhone or iPad simulator and
