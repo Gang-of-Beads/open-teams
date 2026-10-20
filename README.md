@@ -47,6 +47,10 @@ Download from [GitHub Releases](https://github.com/IsmaelMartinez/teams-for-linu
 > [!TIP]
 > For AppImage files, use [`AppImageLauncher`](https://github.com/TheAssassin/AppImageLauncher) for better desktop integration.
 
+### iOS and iPadOS (experimental)
+
+An experimental Swift/WKWebView wrapper lives in [`ios/`](ios/README.md). It is built from source with Xcode and sideloaded onto your own device; see the [iOS README](ios/README.md) for build, install and limitations.
+
 ## Quick Start
 
 1. **Install** using your preferred method above

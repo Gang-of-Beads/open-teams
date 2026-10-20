@@ -1,0 +1,8 @@
+# Per-developer signing overrides
+Config/Local.xcconfig
+
+# Xcode user state and build output
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/

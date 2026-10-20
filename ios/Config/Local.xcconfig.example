@@ -1,0 +1,10 @@
+// Copy to Local.xcconfig (git-ignored) and fill in your own values.
+//
+// DEVELOPMENT_TEAM: the 10-character Team ID shown in Xcode > Settings >
+// Accounts, or at https://developer.apple.com/account (Membership details).
+// A free Personal Team works for installing on your own device.
+DEVELOPMENT_TEAM = ABCDE12345
+
+// Bundle identifiers must be unique per Apple team. Change this if Xcode
+// reports that the identifier is not available.
+PRODUCT_BUNDLE_IDENTIFIER = com.example.openteams
