@@ -27,12 +27,27 @@ const posted = [];
 const errors = [];
 const listeners = {};
 const bridge = { postMessage: (message) => posted.push(JSON.parse(message)), onmessage: null };
-const element = () => ({ style: { setProperty() {} }, appendChild() {}, closest: () => null });
+const element = () => ({ style: { setProperty() {} }, classList: { add() {}, toggle() {} }, appendChild() {}, closest: () => null });
+// What Android WebView reports: "default" has its own groupId and no label.
+class MediaDevices {
+  async enumerateDevices() {
+    return [
+      { kind: "audioinput", deviceId: "default", groupId: "g0", label: "" },
+      { kind: "audioinput", deviceId: "a1", groupId: "g1", label: "Headset earpiece" },
+      { kind: "audioinput", deviceId: "a2", groupId: "g2", label: "Speakerphone" },
+    ];
+  }
+}
 const context = {
   OpenTeamsNative: bridge,
+  MediaDevices,
+  EventTarget,
   console: { ...console, debug() {}, info() {}, warn() {}, error: (...args) => errors.push(args.join(" ")) },
   crypto: webcrypto,
-  navigator: { mediaDevices: {} },
+  navigator: {
+    mediaDevices: new MediaDevices(),
+    permissions: { query: async () => Object.assign(new EventTarget(), { state: "prompt" }) },
+  },
   location: { hash: "", hostname: "teams.cloud.microsoft" },
   document: {
     readyState: "complete",
@@ -44,6 +59,7 @@ const context = {
     querySelector: () => null,
     createElement: element,
   },
+  addEventListener() {},
   setTimeout: () => 0,
   setInterval: () => 0,
   clearInterval() {},
@@ -74,7 +90,22 @@ await new Promise((resolve) => setImmediate(resolve));
 assert.deepEqual(errors, [], "every bundled open-teams module initialises");
 assert.ok(posted.some((m) => m.channel === "get-system-idle-state"), "activityManager started");
 
+// permissions.query() reports Android's grants for the camera and microphone.
+const micStatus = await context.navigator.permissions.query({ name: "microphone" });
+let micChanges = 0;
+micStatus.addEventListener("change", () => micChanges++);
+assert.equal(micStatus.state, "prompt");
+bridge.onmessage({ data: JSON.stringify({ type: "event", channel: "media-permissions", args: [{ microphone: true, camera: false }] }) });
+assert.equal(micStatus.state, "granted");
+assert.equal(micChanges, 1);
+assert.equal((await context.navigator.permissions.query({ name: "camera" })).state, "prompt");
+
+// Teams finds the default microphone by groupId.
+const mic = (await context.navigator.mediaDevices.enumerateDevices())[0];
+assert.deepEqual([mic.deviceId, mic.groupId, mic.label], ["default", "g2", "Default - Speakerphone"]);
+
 new context.Notification("Alice", { body: "Hi" });
+await new Promise((resolve) => setImmediate(resolve)); // the icon is resolved first
 const shown = posted.find((m) => m.channel === "show-notification");
 assert.equal(shown.args[0].title, "Alice");
 assert.equal(shown.args[0].body, "Hi");

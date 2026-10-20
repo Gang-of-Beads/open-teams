@@ -2,6 +2,8 @@ package io.github.gangofbeads.openteams
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.net.Uri
 import androidx.preference.PreferenceManager
 import org.json.JSONObject
@@ -64,6 +66,15 @@ object Settings {
             "android",
             JSONObject()
                 .put("viewportWidth", viewportWidth)
-                .put("nativeNavigation", nativeNavigation),
+                .put("nativeNavigation", nativeNavigation)
+                .put("mediaPermissions", mediaPermissions(OpenTeamsApp.instance)),
         )
+
+    /** Android's camera/microphone grants, which the page reports through permissions.query(). */
+    fun mediaPermissions(context: Context): JSONObject {
+        fun granted(permission: String) = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        return JSONObject()
+            .put("microphone", granted(android.Manifest.permission.RECORD_AUDIO))
+            .put("camera", granted(android.Manifest.permission.CAMERA))
+    }
 }

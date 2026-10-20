@@ -4,13 +4,7 @@
     <string name="close">关闭</string>
     <string name="quit">退出</string>
 
-    <string name="nav_activity">活动</string>
-    <string name="nav_chat">聊天</string>
-    <string name="nav_teams">团队</string>
-    <string name="nav_calendar">日历</string>
-    <string name="nav_calls">通话</string>
     <string name="nav_more">更多</string>
-    <string name="nav_files">文件</string>
 
     <string name="join_meeting">加入会议</string>
     <string name="join">加入</string>
@@ -21,6 +15,11 @@
     <string name="phone_number">电话号码</string>
     <string name="call">呼叫</string>
     <string name="reload">重新加载</string>
+    <string name="open_drawer">打开导航菜单</string>
+    <string name="search">搜索</string>
+    <string name="set_status">设置状态</string>
+    <string name="all_apps">所有应用</string>
+    <string name="teams_settings">Teams 设置及更多</string>
 
     <string name="teams_call">Teams 通话</string>
     <string name="incoming_teams_call">Microsoft Teams 来电</string>
@@ -48,6 +47,11 @@
     <string name="background_title">Open Teams 已连接</string>
     <string name="background_text">在后台接收来电和消息</string>
 
+    <string name="you">你</string>
+    <string name="open_settings">打开设置</string>
+    <string name="permission_blocked_microphone">Open Teams 的麦克风权限已关闭，通话中别人听不到你。请在应用权限里打开“麦克风”。</string>
+    <string name="permission_blocked_camera">Open Teams 的相机权限已关闭，无法共享视频。请在应用权限里打开“相机”。</string>
+    <string name="permission_blocked_both">Open Teams 的麦克风和相机权限已关闭。请在应用权限里打开它们，才能加入通话和会议。</string>
     <string name="no_app_for_link">没有可以打开此链接的应用</string>
     <string name="downloading">正在下载 %1$s</string>
     <string name="downloaded">已将 %1$s 保存到“下载”</string>

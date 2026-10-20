@@ -7,4 +7,7 @@
     <color name="call_stage">#252424</color>
     <color name="call_bar">#E62B2B2B</color>
     <color name="nav_inactive">#616161</color>
+    <!-- Selected tab on a dark / light Teams theme (fluentcolordark/fluentcolor tms primary). -->
+    <color name="brand_on_dark">#7F85F5</color>
+    <color name="brand_on_light">#5B5FC7</color>
 </resources>

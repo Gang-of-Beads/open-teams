@@ -1,6 +1,7 @@
 package io.github.gangofbeads.openteams.web
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -28,10 +29,12 @@ class WebBridge : WebViewCompat.WebMessageListener {
     private val main = Handler(Looper.getMainLooper())
     private var proxy: JavaScriptReplyProxy? = null
 
-    /** Last Teams app reported by the page ("chat", "calendar", ...), for the bottom bar. */
-    var activeApp: String? = null
+    /** Teams' shell as last reported by the page, for the native bars and drawer. */
+    var shellState: ShellState? = null
         private set
-    var onActiveAppChanged: ((String?) -> Unit)? = null
+    var avatar: Bitmap? = null
+        private set
+    var onShellChanged: (() -> Unit)? = null
 
     override fun onPostMessage(
         view: WebView,
@@ -48,7 +51,8 @@ class WebBridge : WebViewCompat.WebMessageListener {
         when (json.optString("type")) {
             "hello" -> {
                 TeamsWeb.pageReady = true
-                activeApp = null
+                shellState = null
+                onShellChanged?.invoke()
             }
             "send" -> onSend(channel, args)
             "invoke" -> {
@@ -118,11 +122,20 @@ class WebBridge : WebViewCompat.WebMessageListener {
             "call-control-result" -> args.optJSONObject(0)?.let {
                 CallController.onControlResult(it.optString("action"), it.optBoolean("handled"))
             }
-            "active-app-changed" -> {
-                val app = if (args.isNull(0)) null else args.optString(0)
-                if (activeApp == null && app != null) emitSystemTheme()
-                activeApp = app
-                onActiveAppChanged?.invoke(app)
+            "shell-state" -> args.optJSONObject(0)?.let {
+                val state = ShellState.parse(it)
+                // theme.js can apply the OS theme once Teams' shell has rendered.
+                if (shellState?.apps.isNullOrEmpty() && state.apps.isNotEmpty()) emitSystemTheme()
+                shellState = state
+                onShellChanged?.invoke()
+            }
+            "profile-avatar" -> {
+                val data = args.optString(0)
+                if (data.startsWith("data:image/")) {
+                    val bytes = android.util.Base64.decode(data.substringAfter(','), android.util.Base64.DEFAULT)
+                    avatar = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    onShellChanged?.invoke()
+                }
             }
             "screen-share-stop" -> ScreenShare.stop()
             "save-file" -> args.optJSONObject(0)?.let { Downloads.saveDataUrl(it.optString("name"), it.optString("dataUrl")) }

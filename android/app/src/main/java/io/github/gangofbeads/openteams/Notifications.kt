@@ -63,36 +63,58 @@ object Notifications {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    /** A Teams web notification (see the Notification shim in android-preload.js). */
+    // Recent messages per conversation (Teams' notification tag), shown together
+    // like the native app's chat notifications. Cleared when the chat is opened.
+    private const val MAX_MESSAGES = 6
+    private val conversations = mutableMapOf<String, MutableList<NotificationCompat.MessagingStyle.Message>>()
+
+    fun clearConversation(tag: String?) {
+        if (tag != null) conversations.remove(tag)
+    }
+
+    /** A Teams web notification (see the Notification shim in android-preload.js). Main thread. */
     @SuppressLint("MissingPermission") // canNotify
     fun showMessage(context: Context, options: JSONObject) {
         if (!Settings.messageNotifications || !canNotify(context)) return
         val id = options.optString("notificationId")
         val title = options.optString("title")
         val body = options.optString("body")
+        val tag = options.optString("tag").ifBlank { id }
+        // While a call rings, the ringing screen already says who is calling.
+        val ringing = CallController.incoming
+        if (ringing != null && (title.contains(ringing.caller) || body.contains(ringing.caller))) return
+
         val icon = options.optString("icon").takeIf { it.startsWith("data:image/") }?.let {
             runCatching {
                 val bytes = Base64.decode(it.substringAfter(','), Base64.DEFAULT)
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
             }.getOrNull()
         }
+        val sender = Person.Builder().setName(title).setIcon(icon?.let(IconCompat::createWithBitmap)).build()
+        val messages = conversations.getOrPut(tag) { mutableListOf() }
+        messages.add(NotificationCompat.MessagingStyle.Message(body, System.currentTimeMillis(), sender))
+        while (messages.size > MAX_MESSAGES) messages.removeAt(0)
+        val style = NotificationCompat.MessagingStyle(Person.Builder().setName(context.getString(R.string.you)).build())
+        messages.forEach(style::addMessage)
+
         val intent = Intent(context, MainActivity::class.java)
             .setAction(MainActivity.ACTION_NOTIFICATION_CLICKED)
             .putExtra(MainActivity.EXTRA_NOTIFICATION_ID, id)
+            .putExtra(MainActivity.EXTRA_NOTIFICATION_TAG, tag)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_chat)
             .setColor(ContextCompat.getColor(context, R.color.brand))
             .setContentTitle(title)
             .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setStyle(style)
             .setLargeIcon(icon)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
-            .setContentIntent(PendingIntent.getActivity(context, id.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE))
+            .setContentIntent(PendingIntent.getActivity(context, tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
             .build()
-        // One notification per Teams tag (conversation), so a chat updates in place.
-        NotificationManagerCompat.from(context).notify(options.optString("tag").ifBlank { id }, MESSAGE_ID, notification)
+        // One notification per Teams tag (conversation), updated as messages arrive.
+        NotificationManagerCompat.from(context).notify(tag, MESSAGE_ID, notification)
     }
 
     fun incomingCall(context: Context): Notification {

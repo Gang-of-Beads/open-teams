@@ -141,24 +141,120 @@ function createNotificationStub() {
   return stub;
 }
 
+// Teams passes the sender's avatar as a URL on its own origin; Android needs the bytes.
+async function iconData(src) {
+  if (typeof src !== "string" || !src) {
+    return null;
+  }
+  if (src.startsWith("data:image/")) {
+    return src;
+  }
+  try {
+    const response = await fetch(src, { credentials: "include" });
+    if (!response.ok) {
+      return null;
+    }
+    const bitmap = await createImageBitmap(await response.blob());
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 96;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, 96, 96);
+    bitmap.close();
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null; // cross-origin or not an image: show the notification without it
+  }
+}
+
 function AndroidNotification(title, options = {}) {
   const notificationId = crypto.randomUUID();
   const stub = createNotificationStub();
   notificationBridge.register(notificationId, stub);
   stub.close = () => notificationBridge.close(notificationId);
-  const icon = typeof options.icon === "string" && options.icon.startsWith("data:image/") ? options.icon : null;
-  ipcRenderer.invoke("show-notification", {
-    notificationId,
-    title: String(title ?? ""),
-    body: String(options.body ?? ""),
-    tag: options.tag ? String(options.tag) : null,
-    icon,
-  });
+  iconData(options.icon).then((icon) =>
+    ipcRenderer.invoke("show-notification", {
+      notificationId,
+      title: String(title ?? ""),
+      body: String(options.body ?? ""),
+      tag: options.tag ? String(options.tag) : null,
+      icon,
+    }),
+  );
   return stub;
 }
 AndroidNotification.requestPermission = async () => "granted";
 Object.defineProperty(AndroidNotification, "permission", { get: () => "granted" });
 globalThis.Notification = AndroidNotification;
+
+// --- Camera and microphone permission state ------------------------------------
+// WebView keeps no per-site permission state, so permissions.query() answers
+// "prompt" even once Android has granted the app the camera and microphone,
+// and Teams then treats them as not yet allowed. Report Android's state.
+
+let androidMedia = { microphone: false, camera: false };
+const mediaStatuses = [];
+
+if (navigator.permissions?.query) {
+  const query = navigator.permissions.query.bind(navigator.permissions);
+  navigator.permissions.query = async (descriptor) => {
+    const status = await query(descriptor);
+    const name = descriptor?.name;
+    if (name === "microphone" || name === "camera") {
+      Object.defineProperty(status, "state", { configurable: true, get: () => (androidMedia[name] ? "granted" : "prompt") });
+      mediaStatuses.push({ name, status });
+      if (mediaStatuses.length > 50) {
+        mediaStatuses.shift();
+      }
+    }
+    return status;
+  };
+}
+
+function setAndroidMedia(state) {
+  const before = androidMedia;
+  androidMedia = { microphone: Boolean(state?.microphone), camera: Boolean(state?.camera) };
+  for (const { name, status } of mediaStatuses) {
+    if (before[name] !== androidMedia[name]) {
+      status.dispatchEvent(new Event("change"));
+    }
+  }
+}
+
+ipcRenderer.on("media-permissions", (_event, state) => setAndroidMedia(state));
+
+// --- Default microphone --------------------------------------------------------
+// Teams selects the microphone whose groupId matches the "default" entry, and in
+// a meeting disables its mic button when none does. WebView gives "default" its
+// own groupId and no label, so point it at the device Chromium's
+// AudioManagerAndroid opens for "default": wired, USB, Bluetooth, else speakerphone.
+const DEFAULT_MIC_ORDER = ["Wired headset", "USB audio", "Bluetooth headset", "Speakerphone"];
+
+function withDefaultMicrophone(devices) {
+  const mics = devices.filter((d) => d.kind === "audioinput" && d.deviceId !== "default" && d.label);
+  const target = DEFAULT_MIC_ORDER.map((label) => mics.find((d) => d.label === label)).find(Boolean) ?? mics[0];
+  if (!target) {
+    return devices;
+  }
+  return devices.map((d) => {
+    if (d.kind !== "audioinput" || d.deviceId !== "default") {
+      return d;
+    }
+    const fields = { deviceId: d.deviceId, kind: d.kind, label: `Default - ${target.label}`, groupId: target.groupId };
+    const alias = Object.create(Object.getPrototypeOf(d));
+    for (const [key, value] of Object.entries(fields)) {
+      Object.defineProperty(alias, key, { value, enumerable: true });
+    }
+    alias.toJSON = () => fields;
+    alias.getCapabilities = () => d.getCapabilities?.();
+    return alias;
+  });
+}
+
+if (globalThis.MediaDevices?.prototype.enumerateDevices) {
+  const enumerate = MediaDevices.prototype.enumerateDevices;
+  MediaDevices.prototype.enumerateDevices = async function () {
+    return withDefaultMicrophone(await enumerate.call(this));
+  };
+}
 
 // --- Screen sharing ----------------------------------------------------------
 // WebView has no getDisplayMedia. The app captures the screen with
@@ -222,71 +318,258 @@ if (navigator.mediaDevices && !navigator.mediaDevices.getDisplayMedia) {
 
 // --- Native shell helpers ----------------------------------------------------
 
-// Teams' built-in app ids, as used by the native bottom navigation.
-const APP_IDS = {
-  activity: "14d6962d-6eeb-4f48-8890-de55454bb136",
-  chat: "86fcd49b-61a2-4701-b771-54728cd291fb",
-  teams: "2a84919f-59d8-4441-a975-2a8c2643b741",
-  calendar: "ef56c0de-36fc-4ef8-b417-3d82ba9d073c",
-  calls: "20c3440d-c67e-4420-9f80-0e50c39693df",
-  files: "5af6a76b-40fc-4ba1-af29-8f49b08e44fd",
+// Teams' DOM as observed on teams.cloud.microsoft (2026-10) in this WebView's
+// narrow layout. The native top bar, drawer and bottom bar stand in for Teams'
+// title bar and app rail; the web ones stay in the DOM and are driven from here.
+const SHELL = {
+  titleBar: '[data-tid="app-layout-area--title-bar"]',
+  appButtons: '[data-tid="app-bar-wrapper"] button[data-pinned="true"]',
+  back: '[data-tid="layout-navigation-controls"]', // "Return to list" when a conversation is open
+  meTrigger: '[data-tid="me-control-avatar-trigger"]',
+  meAvatar: '[data-tid="me-control-avatar"]',
+  presence: '[data-tid="me-control-avatar-presence"]',
+  search: '[data-tid="title-bar-toggle-search-btn"]',
+  searchInput: "#ms-searchux-input",
+  searchPopup: '[data-tid="ms-searchux-popup"]',
+  settings: '[data-tid="more-options-header"]',
+  hamburger: '[data-tid="hamburger-button"]',
 };
 
-function findAppButton(appId) {
-  const element = document.querySelector(`[data-tid*="${appId}"], [id*="${appId}"]`);
-  return element?.closest("button, [role='button'], [role='tab'], a") ?? element;
-}
+// Hide Teams' title bar (the native top bar replaces it) unless one of its
+// menus is in use, and the list titles the native top bar already shows.
+const SHELL_CSS = `
+html.ot-native:not(.ot-header) ${SHELL.titleBar} { display: none !important; }
+html.ot-native:not(.ot-header) [data-tid="app-layout-area--nav"] { visibility: hidden; } /* the native bars replace it */
+html.ot-native [data-tid="app-layout-area--mid-nav"] h1,
+html.ot-native [data-tid="app-layout-area--sub-nav"] h1 { visibility: hidden; }
+html.ot-native [role="tooltip"] { display: none !important; } /* hover tooltips on a touch screen */
+`;
 
-function navigateApp(app) {
-  const appId = APP_IDS[app];
-  if (!appId) {
+function visible(element) {
+  if (!element) {
     return false;
   }
-  const button = findAppButton(appId);
-  if (button) {
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < innerWidth;
+}
+
+// Visible and not covered: in the list view Teams keeps the conversation
+// header (and its "Return to list" button) in place underneath the list.
+function onTop(element) {
+  if (!visible(element)) {
+    return false;
+  }
+  const rect = element.getBoundingClientRect();
+  const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  return Boolean(hit) && (hit === element || element.contains(hit));
+}
+
+const appLabel = (button) => (button.getAttribute("aria-label") || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+
+// "Header mode": the web title bar is shown while its search box, profile
+// menu, settings menu or expanded app rail is in use, then hidden again.
+let headerMode = false;
+let headerSince = 0;
+let headerIdlePolls = 0;
+
+// Teams remembers an expanded app rail across reloads; outside header mode it
+// would cover the list, so fold it back.
+function appRailExpanded() {
+  return document.querySelector(SHELL.hamburger)?.dataset.appbarExpanded === "true";
+}
+
+function collapseAppRail() {
+  if (appRailExpanded()) {
+    document.querySelector(SHELL.hamburger).click();
+  }
+}
+
+function setHeaderMode(on) {
+  if (!on) {
+    collapseAppRail();
+  }
+  headerMode = on;
+  headerSince = Date.now();
+  headerIdlePolls = 0;
+  document.documentElement.classList.toggle("ot-header", on);
+}
+
+function headerInUse() {
+  const titleBar = document.querySelector(SHELL.titleBar);
+  return Boolean(titleBar?.contains(document.activeElement)) ||
+    visible(document.querySelector(SHELL.searchPopup)) ||
+    appRailExpanded() ||
+    [...document.querySelectorAll('[role="menu"], [role="dialog"]')].some(visible);
+}
+
+function shellAction(action) {
+  const selector = { search: SHELL.search, status: SHELL.meTrigger, settings: SHELL.settings, apps: SHELL.hamburger }[action];
+  const button = selector && document.querySelector(selector);
+  if (!button) {
+    return;
+  }
+  setHeaderMode(true);
+  requestAnimationFrame(() => {
     button.click();
-    return true;
-  }
-  // Teams' own deep link for an app; handled in-page like deepLinkRouter.js.
-  location.hash = `#/l/app/${appId}`;
-  return false;
+    if (action === "search") {
+      setTimeout(() => document.querySelector(SHELL.searchInput)?.focus(), 150);
+    }
+  });
 }
 
-// With the native bottom bar enabled, hide Teams' own app rail: the smallest
-// narrow ancestor holding every app button found.
-let hiddenRail = null;
-
-function hideWebAppRail() {
-  if (hiddenRail?.isConnected) {
-    return true;
+function shellBack() {
+  if (headerMode) {
+    document.activeElement?.blur?.();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
+    setHeaderMode(false);
+    return;
   }
-  const buttons = Object.values(APP_IDS).map(findAppButton).filter(Boolean);
-  if (buttons.length < 2) {
-    return false;
-  }
-  let rail = buttons[0];
-  while (rail && !buttons.every((button) => rail.contains(button))) {
-    rail = rail.parentElement;
-  }
-  while (rail?.parentElement && rail.parentElement.offsetWidth > 0 && rail.parentElement.offsetWidth <= 120) {
-    rail = rail.parentElement;
-  }
-  if (!rail || rail.offsetWidth > 120) {
-    return false;
-  }
-  rail.style.setProperty("display", "none", "important");
-  hiddenRail = rail;
-  return true;
+  document.querySelector(SHELL.back)?.click();
 }
 
-function activeApp() {
-  for (const [app, appId] of Object.entries(APP_IDS)) {
-    const button = findAppButton(appId);
-    if (button?.matches("[aria-pressed='true'], [aria-selected='true'], [aria-current='page'], [aria-current='true']")) {
-      return app;
+function navigateApp(id) {
+  const button = document.getElementById(id);
+  if (!button) {
+    return;
+  }
+  button.click();
+  // Like the native app, a tab opens on its list rather than the last conversation.
+  setTimeout(() => {
+    const back = document.querySelector(SHELL.back);
+    if (onTop(back)) {
+      back.click();
+    }
+  }, 700);
+}
+
+// The first opaque background at a point, for native bars that match Teams' theme.
+function backgroundAt(x, y) {
+  let element = document.elementFromPoint(x, y);
+  while (element) {
+    const color = getComputedStyle(element).backgroundColor;
+    if (color && color !== "transparent" && !/rgba\(.*,\s*0\)$/.test(color)) {
+      return color;
+    }
+    element = element.parentElement;
+  }
+  return getComputedStyle(document.body).backgroundColor;
+}
+
+function profile() {
+  const triggerLabel = document.querySelector(SHELL.meTrigger)?.getAttribute("aria-label") || "";
+  const avatarLabel = document.querySelector(SHELL.meAvatar)?.getAttribute("aria-label") || "";
+  const presence = document.querySelector(SHELL.presence);
+  const email = /[^\s,;()]+@[^\s,;()]+\.[a-z]{2,}/i.exec(triggerLabel)?.[0] ?? "";
+  return {
+    name: (/ of (.+?)\.?$/.exec(avatarLabel)?.[1] ?? avatarLabel) || email,
+    email,
+    presence: presence?.getAttribute("aria-label") || "",
+    presenceColor: presence ? getComputedStyle(presence.querySelector("svg") || presence).color : "",
+  };
+}
+
+let lastAvatarSrc = null;
+
+function sendAvatar() {
+  const image = document.querySelector(`${SHELL.meAvatar} img`);
+  if (!image?.complete || !image.naturalWidth || image.src === lastAvatarSrc) {
+    return;
+  }
+  lastAvatarSrc = image.src;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 96;
+    canvas.getContext("2d").drawImage(image, 0, 0, 96, 96);
+    ipcRenderer.send("profile-avatar", canvas.toDataURL("image/png"));
+  } catch (err) {
+    console.debug("[OpenTeams] avatar not readable", err);
+  }
+}
+
+let lastShellState = "";
+let shellReadyAt = 0;
+let userTouched = false;
+globalThis.addEventListener("pointerdown", () => { userTouched = true; }, { capture: true, passive: true });
+
+function reportShell() {
+  document.documentElement.classList.add("ot-native");
+  document.documentElement.classList.toggle("ot-header", headerMode);
+  if (headerMode) {
+    headerIdlePolls = headerInUse() ? 0 : headerIdlePolls + 1;
+    if (headerIdlePolls >= 2 && Date.now() - headerSince > 1500) {
+      setHeaderMode(false);
+    }
+  } else {
+    collapseAppRail();
+  }
+  // Like the native app, start on the list rather than Teams' last open
+  // conversation, which Teams restores a little after its app bar renders.
+  const back = document.querySelector(SHELL.back);
+  if (!shellReadyAt && document.querySelector(SHELL.appButtons)) {
+    shellReadyAt = Date.now();
+  }
+  if (shellReadyAt && !userTouched && Date.now() - shellReadyAt < 20000 && onTop(back)) {
+    back.click();
+  }
+  const state = {
+    apps: [...document.querySelectorAll(SHELL.appButtons)].map((button) => ({
+      id: button.dataset.tid,
+      label: appLabel(button),
+      selected: button.getAttribute("aria-pressed") === "true",
+    })),
+    detail: onTop(back),
+    header: headerMode,
+    profile: profile(),
+    colors: { top: backgroundAt(innerWidth / 2, 2), bottom: backgroundAt(innerWidth / 2, innerHeight - 2) },
+  };
+  const json = JSON.stringify(state);
+  if (json !== lastShellState) {
+    lastShellState = json;
+    ipcRenderer.send("shell-state", state);
+  }
+  sendAvatar();
+  watchPrejoin();
+  watchCallButtons();
+}
+
+// Teams' own call buttons carry the mute and camera state (data-state is not
+// localised). speakingIndicator's WebRTC audio level rarely arrives in WebView,
+// so without this the native call bar would always show the mic as on.
+let callButtonState = "";
+
+function watchCallButtons() {
+  const mic = document.querySelector(CALL_BUTTONS.mute)?.dataset.state;
+  const video = document.querySelector(CALL_BUTTONS.video)?.dataset.state;
+  const state = mic ? `${mic}|${video}` : "";
+  if (state === callButtonState) {
+    return;
+  }
+  callButtonState = state;
+  if (mic) {
+    ipcRenderer.send("microphone-state-changed", mic === "mic-off" ? "muted" : "silent");
+    ipcRenderer.send("camera-state-changed", video === "call-video");
+  }
+}
+
+// Teams reports "calling-screen-rendered" (call-connected) for its pre-join
+// screen too, but nothing when that screen is cancelled, which would leave the
+// native call running. End it when the screen goes without the call starting.
+let prejoinShown = false;
+let prejoinLeftAt = 0;
+
+function watchPrejoin() {
+  if (document.querySelector('[data-tid="calling-prejoin-screen"]')) {
+    prejoinShown = true;
+    prejoinLeftAt = 0;
+  } else if (prejoinShown && document.querySelector(CALL_BUTTONS.hangup)) {
+    prejoinShown = false; // joined
+  } else if (prejoinShown) {
+    prejoinLeftAt ||= Date.now();
+    if (Date.now() - prejoinLeftAt > 3000) {
+      prejoinShown = false;
+      ipcRenderer.invoke("call-disconnected");
     }
   }
-  return null;
 }
 
 // In-call buttons, by the ids Teams gives its calling controls. The app falls
@@ -326,9 +609,9 @@ function applyViewportWidth(width) {
   }
 }
 
-ipcRenderer.on("navigate-app", (_event, app) => {
-  ipcRenderer.send("navigate-app-result", { app, handled: navigateApp(app) });
-});
+ipcRenderer.on("navigate-app", (_event, id) => navigateApp(id));
+ipcRenderer.on("shell-action", (_event, action) => shellAction(action));
+ipcRenderer.on("shell-back", () => shellBack());
 
 ipcRenderer.on("call-control", (_event, action) => {
   const button = document.querySelector(CALL_BUTTONS[action] ?? "#none");
@@ -366,6 +649,7 @@ globalThis.__openTeams = { version: 1 };
 // --- open-teams modules ------------------------------------------------------
 
 ipcRenderer.invoke("get-config").then((config) => {
+  setAndroidMedia(config.android?.mediaPermissions);
   if (config.android?.viewportWidth > 0) {
     applyViewportWidth(config.android.viewportWidth);
   }
@@ -399,22 +683,18 @@ ipcRenderer.invoke("get-config").then((config) => {
     }
     ipcRenderer.on("config-changed", (_event, changes) => Object.assign(config, changes));
 
-    // Report shell state (active app, rail hidden) until Teams has rendered,
-    // then keep the bottom bar's selection in sync.
-    let lastApp = null;
-    setInterval(() => {
-      if (document.hidden) {
-        return;
-      }
-      if (config.android?.nativeNavigation) {
-        hideWebAppRail();
-      }
-      const app = activeApp();
-      if (app !== lastApp) {
-        lastApp = app;
-        ipcRenderer.send("active-app-changed", app);
-      }
-    }, 1000);
+    if (config.android?.nativeNavigation) {
+      const style = document.createElement("style");
+      style.id = "open-teams-shell";
+      style.textContent = SHELL_CSS;
+      document.head.appendChild(style);
+      document.documentElement.classList.add("ot-native");
+      setInterval(() => {
+        if (!document.hidden) {
+          reportShell();
+        }
+      }, 500);
+    }
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init, { once: true });

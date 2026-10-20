@@ -95,6 +95,7 @@ object CallController {
         if (incoming == null) return
         incoming = null
         TeamsWeb.bridge.emit("incoming-call-action", if (video) "ACCEPT_VIDEO" else "ACCEPT_AUDIO")
+        connection?.preferSpeaker = video
         connection?.setActive()
         MainActivity.bringToFront(app)
         changed()

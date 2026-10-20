@@ -29,7 +29,8 @@ app on the next build.
 | IPC | `ipcRenderer` ↔ `ipcMain` | An `ipcRenderer` shim ↔ `WebBridge.kt` (a `WebMessageListener` scoped to Teams origins) |
 | Call events | `activityHub.js` → `incoming-call-created`, `call-connected`, … | Same modules and channels, handled by `call/CallController.kt` |
 | Incoming call | `incomingCallToast` window | Self-managed Telecom call, CallStyle notification, full-screen ringing screen |
-| Notifications | `Notification` override in preload | The same stub-and-bridge approach, shown as Android notifications |
+| Notifications | `Notification` override in preload | The same stub-and-bridge approach, shown as Android `MessagingStyle` notifications grouped per Teams tag, with the sender's avatar |
+| Camera and microphone | Chromium's site permissions | `onPermissionRequest` asks Android (one dialog at a time); `permissions.query()` reports Android's grants; a "Open settings" hint once a permission is permanently denied |
 | Screen sharing | `desktopCapturer` | `MediaProjection` frames drawn on a canvas; its `captureStream()` answers `getDisplayMedia()` |
 
 Reused open-teams modules: `activityHub`, `reactHandler`, `tokenCache`,
@@ -47,7 +48,9 @@ The Android app adds:
 | Channel | Direction | Purpose |
 | --- | --- | --- |
 | `show-notification` | page → app | Notification shim (invoke) |
-| `navigate-app` / `active-app-changed` | both | Native bottom bar ↔ Teams' app rail |
+| `media-permissions` | app → page | Android's camera/microphone grants, for `permissions.query()` |
+| `shell-state` / `profile-avatar` | page → app | Teams' pinned apps, selection, list/detail view, presence and theme colors for the native bars |
+| `navigate-app` / `shell-action` / `shell-back` | app → page | Native bars drive Teams: open an app by id, search, status, settings, all apps, back |
 | `call-control` / `call-control-result` | both | In-call buttons; Teams shortcuts as a fallback |
 | `screen-share-start` / `screen-share-stop` / `screen-share-ended` | both | `getDisplayMedia()` |
 | `open-deep-link` / `deep-link-fallback` | both | In-page routing as in `deepLinkRouter.js` |
@@ -82,7 +85,15 @@ Design Icons (Apache-2.0).
   battery optimization exemption are for.
 - The selectors for Teams' app rail and in-call buttons (`#microphone-button`,
   `#hangup-button`, …) depend on Teams' DOM. When they miss, calls fall back to
-  Teams' keyboard shortcuts (Ctrl+Shift+M/O/H/K/E).
+  Teams' keyboard shortcuts (Ctrl+Shift+M/O/H/K/E). The native call bar reads
+  the mute and camera state from those buttons' `data-state`.
+- WebView gives the "default" microphone its own `groupId` and no label, so
+  Teams would select no microphone and disable its mute button in meetings. The
+  preload points "default" at the device Chromium opens for it (wired, USB,
+  Bluetooth, else speakerphone). Teams cannot pick a speaker (WebView has no
+  `setSinkId`); the native call bar's audio route button does that.
+- Teams reports its pre-join screen as a connected call; the app ends the
+  native call if that screen closes without joining.
 - Screen sharing sends about 10 JPEG frames per second at 1280 px and has no
   system audio.
 - Teams' own in-page ringtone can play alongside the system ringtone.

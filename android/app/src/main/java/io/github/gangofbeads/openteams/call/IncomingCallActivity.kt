@@ -1,8 +1,10 @@
 package io.github.gangofbeads.openteams.call
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import io.github.gangofbeads.openteams.MainActivity
 import io.github.gangofbeads.openteams.databinding.ActivityIncomingCallBinding
 
 /**
@@ -18,8 +20,14 @@ class IncomingCallActivity : AppCompatActivity() {
         binding = ActivityIncomingCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.decline.setOnClickListener { CallController.decline() }
-        binding.acceptAudio.setOnClickListener { CallController.answer(video = false) }
-        binding.acceptVideo.setOnClickListener { CallController.answer(video = true) }
+        binding.acceptAudio.setOnClickListener { answer(MainActivity.ACTION_ANSWER_AUDIO) }
+        binding.acceptVideo.setOnClickListener { answer(MainActivity.ACTION_ANSWER_VIDEO) }
+    }
+
+    /** MainActivity asks for the microphone (and camera) before Teams picks up. */
+    private fun answer(action: String) {
+        startActivity(Intent(this, MainActivity::class.java).setAction(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        finish()
     }
 
     override fun onStart() {

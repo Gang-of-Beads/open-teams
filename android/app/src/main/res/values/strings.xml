@@ -5,13 +5,7 @@
     <string name="close">Close</string>
     <string name="quit">Quit</string>
 
-    <string name="nav_activity">Activity</string>
-    <string name="nav_chat">Chat</string>
-    <string name="nav_teams">Teams</string>
-    <string name="nav_calendar">Calendar</string>
-    <string name="nav_calls">Calls</string>
     <string name="nav_more">More</string>
-    <string name="nav_files">Files</string>
 
     <string name="join_meeting">Join a meeting</string>
     <string name="join">Join</string>
@@ -22,6 +16,11 @@
     <string name="phone_number">Phone number</string>
     <string name="call">Call</string>
     <string name="reload">Reload</string>
+    <string name="open_drawer">Open navigation menu</string>
+    <string name="search">Search</string>
+    <string name="set_status">Set status</string>
+    <string name="all_apps">All apps</string>
+    <string name="teams_settings">Teams settings and more</string>
 
     <string name="teams_call">Teams call</string>
     <string name="incoming_teams_call">Microsoft Teams call</string>
@@ -49,6 +48,11 @@
     <string name="background_title">Open Teams is connected</string>
     <string name="background_text">Receiving calls and messages in the background</string>
 
+    <string name="you">You</string>
+    <string name="open_settings">Open settings</string>
+    <string name="permission_blocked_microphone">The microphone is off for Open Teams, so others cannot hear you in calls. Turn on Microphone in the app\'s permissions.</string>
+    <string name="permission_blocked_camera">The camera is off for Open Teams, so you cannot share video. Turn on Camera in the app\'s permissions.</string>
+    <string name="permission_blocked_both">The microphone and camera are off for Open Teams. Turn them on in the app\'s permissions to join calls and meetings.</string>
     <string name="no_app_for_link">No app can open this link</string>
     <string name="downloading">Downloading %1$s</string>
     <string name="downloaded">Saved %1$s to Downloads</string>

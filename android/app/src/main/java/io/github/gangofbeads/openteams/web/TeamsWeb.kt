@@ -107,6 +107,8 @@ object TeamsWeb {
         pageReady = false
     }
 
+    fun emitMediaPermissions() = bridge.emit("media-permissions", Settings.mediaPermissions(OpenTeamsApp.instance))
+
     /**
      * Teams calling shortcuts (open-teams' teamsControlService.js uses the
      * same), sent as real key events when the in-page button is not found.

@@ -9,8 +9,10 @@ import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.OutcomeReceiver
 import android.telecom.CallAudioState
 import android.telecom.CallEndpoint
+import android.telecom.CallEndpointException
 import android.telecom.Connection
 import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
@@ -22,6 +24,7 @@ import android.telecom.VideoProfile
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import io.github.gangofbeads.openteams.OpenTeamsApp
 import io.github.gangofbeads.openteams.R
 import io.github.gangofbeads.openteams.Settings
 
@@ -100,6 +103,7 @@ class TeamsConnectionService : ConnectionService() {
         TeamsConnection().apply {
             setAddress(request.address, TelecomManager.PRESENTATION_ALLOWED)
             setCallerDisplayName(getString(R.string.teams_call), TelecomManager.PRESENTATION_ALLOWED)
+            preferSpeaker = true // started in the page: almost always a meeting
             setDialing()
             CallController.attach(this)
         }
@@ -116,6 +120,10 @@ class TeamsConnection : Connection() {
 
     // Telecom reports its mute state on every audio update, so only act on changes.
     private var systemMuted: Boolean? = null
+
+    /** Meetings and video calls start on the speaker, like the native app; headsets and Bluetooth still win. */
+    var preferSpeaker = false
+    private var routeChosen = false
 
     init {
         connectionProperties = PROPERTY_SELF_MANAGED
@@ -155,19 +163,40 @@ class TeamsConnection : Connection() {
 
     @Deprecated("Replaced by CallEndpoint callbacks on API 34")
     override fun onCallAudioStateChanged(state: CallAudioState) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) onSystemMute(state.isMuted)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            onSystemMute(state.isMuted)
+            if (preferSpeaker && !routeChosen) {
+                routeChosen = true
+                @Suppress("DEPRECATION")
+                if (state.route == CallAudioState.ROUTE_EARPIECE) setAudioRoute(CallAudioState.ROUTE_SPEAKER)
+            }
+        }
         CallController.onAudioRouteChanged()
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     override fun onAvailableCallEndpointsChanged(availableEndpoints: List<CallEndpoint>) {
         endpoints = availableEndpoints
+        useSpeakerOnce()
         CallController.onAudioRouteChanged()
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     override fun onCallEndpointChanged(callEndpoint: CallEndpoint) {
         endpoint = callEndpoint
+        useSpeakerOnce()
         CallController.onAudioRouteChanged()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun useSpeakerOnce() {
+        val current = endpoint ?: return
+        val speaker = endpoints.firstOrNull { it.endpointType == CallEndpoint.TYPE_SPEAKER } ?: return
+        if (!preferSpeaker || routeChosen) return
+        routeChosen = true
+        if (current.endpointType != CallEndpoint.TYPE_EARPIECE) return
+        requestCallEndpointChange(speaker, OpenTeamsApp.instance.mainExecutor, object : OutcomeReceiver<Void, CallEndpointException> {
+            override fun onResult(result: Void?) = Unit
+        })
     }
 }
