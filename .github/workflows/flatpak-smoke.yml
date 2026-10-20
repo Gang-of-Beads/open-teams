@@ -33,7 +33,10 @@ env:
   APP_ID: com.github.IsmaelMartinez.teams_for_linux
 
 jobs:
+  # Only desktop releases (v1.2.3) are packaged this way; the wrapper
+  # releases (ios-v*, android-v*) carry their own artifacts.
   flatpak_smoke:
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     name: flatpak-builder (x86_64)
     runs-on: ubuntu-latest
     timeout-minutes: 45

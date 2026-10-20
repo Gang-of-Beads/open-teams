@@ -12,7 +12,10 @@ defaults:
     shell: bash
 
 jobs:
+  # Only desktop releases (v1.2.3) are packaged this way; the wrapper
+  # releases (ios-v*, android-v*) carry their own artifacts.
   snap-candidate:
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,6 +59,7 @@ jobs:
           snapcraft upload "${SNAP_FILE}" --release=candidate
 
   snap-candidate-arm64:
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
