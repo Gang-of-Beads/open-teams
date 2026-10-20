@@ -70,9 +70,12 @@ this to one year.
 
 ## How it behaves
 
-- Identifies as desktop Safari on macOS, because Teams web sends iOS Safari to
-  an "open in the app" page. The desktop layout is used on both iPhone and
-  iPad; it is most usable on iPad or iPhone in landscape.
+- Identifies as desktop Safari on macOS (the user agent of Safari 27.0.1),
+  because Teams web sends every phone and tablet browser, including iPad
+  Safari and Android Edge/Chrome/Firefox, to an "open in the app" page.
+  Desktop Chrome, Edge and Firefox user agents also pass, but Safari matches
+  the WebKit engine that WKWebView actually runs. The desktop layout is used on
+  both iPhone and iPad; it is most usable on iPad or iPhone in landscape.
 - Cookies and site data persist across launches, so you stay signed in.
 - Sign-in and consent popups open in a sheet inside the app. Links to
   non-Microsoft sites open in Safari; `msteams:`, `mailto:` and `tel:` links
