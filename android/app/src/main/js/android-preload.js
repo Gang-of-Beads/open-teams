@@ -424,15 +424,17 @@ function setHeaderMode(mode) {
 // native bars at the tap, like a native screen transition, instead of once
 // Teams has rendered the new view a few hundred milliseconds later.
 const OPENS_ITEM = `${SHELL.listPane} :is([role="treeitem"]:not([aria-expanded]), [role="option"])`;
-let expectedView = null; // { detail, until }
+let expectedView = null; // { detail, until, hold }
+let itemOpenedAt = 0;
 
-function expectView(detail, ms) {
-  expectedView = { detail, until: Date.now() + ms };
+// hold: keep reporting it until the time is up, even if Teams briefly shows otherwise.
+function expectView(detail, ms, hold = false) {
+  expectedView = { detail, until: Date.now() + ms, hold };
   reportShell();
 }
 
 function shownDetail(actual) {
-  if (expectedView && (actual === expectedView.detail || Date.now() > expectedView.until)) {
+  if (expectedView && ((!expectedView.hold && actual === expectedView.detail) || Date.now() > expectedView.until)) {
     expectedView = null;
   }
   return expectedView ? expectedView.detail : actual;
@@ -569,19 +571,71 @@ function shellBack() {
   }
 }
 
+// Rows of whatever list or view is on screen (chats, activity, calls...).
+function visibleRows() {
+  return [...document.querySelectorAll('[data-tid^="app-layout-area--"] :is([role="treeitem"], [role="option"], [role="row"], [role="listitem"])')]
+    .filter((row) => {
+      const rect = row.getBoundingClientRect();
+      return rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight && rect.left >= 0 && rect.left < innerWidth;
+    })
+    .slice(0, 5);
+}
+
+// Apps where Teams reopened an item right after showing the list.
+const reopeningApps = new Set();
+
 function navigateApp(id) {
   const button = document.getElementById(id);
   if (!button) {
     return;
   }
+  // Teams unmounts an app's view when another opens and rebuilds it on the way
+  // back. The app shows its last look meanwhile and asks for "app-ready" once
+  // new rows (or an app's frame) are on screen.
+  const before = new Set(visibleRows());
+  const start = performance.now();
+  let leftAt = 0;
+  let ready = false;
   button.click();
-  // Like the native app, a tab opens on its list rather than the last conversation.
-  setTimeout(() => {
-    const back = document.querySelector(SHELL.back);
-    if (onTop(back)) {
-      back.click();
+  expectView(false, 2000, true);
+  const check = () => {
+    const elapsed = performance.now() - start;
+    if (itemOpenedAt > start || elapsed > 4000) {
+      if (!ready) {
+        ipcRenderer.send("app-ready", id); // the user moved on, or Teams is slow: show the page as it is
+      }
+      return;
     }
-  }, 700);
+    const back = document.querySelector(SHELL.back);
+    // Like the native app, a tab opens on its list rather than the last
+    // conversation, which Teams may also reopen just after showing the list
+    // (a race in its narrow layout). That happens under the snapshot.
+    if (onTop(back)) {
+      if (!leftAt && elapsed < 2000 && itemOpenedAt < start) {
+        leftAt = performance.now();
+        reopeningApps.add(id);
+        if (ready) {
+          ready = false;
+          ipcRenderer.send("app-busy", id);
+        }
+        back.click();
+      }
+    } else if (!ready) {
+      const rows = visibleRows();
+      const fresh = rows.length >= 3 && rows.every((row) => !before.has(row));
+      const frame = [...document.querySelectorAll('[data-tid="app-layout-area--main"] iframe')].some(visible) &&
+        ![...before].some((row) => row.isConnected && visible(row));
+      const settled = leftAt ? performance.now() - leftAt > 350 : !reopeningApps.has(id) || elapsed > 1200;
+      if (button.getAttribute("aria-pressed") === "true" && (fresh || frame) && settled) {
+        ready = true;
+        requestAnimationFrame(() => ipcRenderer.send("app-ready", id)); // after a paint with the content
+      }
+    }
+    if (!ready || elapsed < 1500) {
+      requestAnimationFrame(check);
+    }
+  };
+  requestAnimationFrame(check);
 }
 
 // The first opaque background at a point, for native bars that match Teams' theme.
@@ -875,6 +929,7 @@ ipcRenderer.invoke("get-config").then((config) => {
         "click",
         (event) => {
           if (event.target.closest?.(OPENS_ITEM) && !event.target.closest("button")) {
+            itemOpenedAt = performance.now();
             expectView(true, 1500);
           }
         },

@@ -103,6 +103,15 @@
                 android:layout_height="0dp"
                 android:layout_weight="1">
 
+                <!-- A tab's last look while Teams rebuilds it; touches go through to the WebView. -->
+                <ImageView
+                    android:id="@+id/tab_snapshot"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitXY"
+                    android:visibility="gone" />
+
                 <com.google.android.material.progressindicator.LinearProgressIndicator
                     android:id="@+id/progress"
                     android:layout_width="match_parent"

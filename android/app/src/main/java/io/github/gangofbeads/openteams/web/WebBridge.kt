@@ -36,6 +36,8 @@ class WebBridge : WebViewCompat.WebMessageListener {
     var avatar: Bitmap? = null
         private set
     var onShellChanged: (() -> Unit)? = null
+    var onAppReady: ((String) -> Unit)? = null
+    var onAppBusy: ((String) -> Unit)? = null
 
     override fun onPostMessage(
         view: WebView,
@@ -123,6 +125,8 @@ class WebBridge : WebViewCompat.WebMessageListener {
             "call-control-result" -> args.optJSONObject(0)?.let {
                 CallController.onControlResult(it.optString("action"), it.optBoolean("handled"))
             }
+            "app-ready" -> onAppReady?.invoke(args.optString(0))
+            "app-busy" -> onAppBusy?.invoke(args.optString(0))
             "show-keyboard" -> TeamsWeb.webView?.let {
                 it.requestFocus()
                 it.context.getSystemService(InputMethodManager::class.java).showSoftInput(it, 0)

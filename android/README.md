@@ -52,6 +52,7 @@ The Android app adds:
 | `shell-state` / `profile-avatar` | page → app | Teams' pinned apps, selection, list/detail view, open menus, presence, theme colors and the list header's buttons (with their SVG icons) for the native bars |
 | `navigate-app` / `shell-action` / `shell-back` | app → page | Native bars drive Teams: open an app by id, search, status, settings, all apps, a list header button (`list:<n>`), back |
 | `show-keyboard` | page → app | Teams focused a text box after a native tap; the app focuses the WebView and opens the keyboard |
+| `app-ready` / `app-busy` | page → app | After a tab switch, Teams has rendered the app (or reopened an item and is going back to the list); the app removes (or restores) the tab's snapshot |
 | `call-control` / `call-control-result` | both | In-call buttons; Teams shortcuts as a fallback |
 | `screen-share-start` / `screen-share-stop` / `screen-share-ended` | both | `getDisplayMedia()` |
 | `open-deep-link` / `deep-link-fallback` | both | In-page routing as in `deepLinkRouter.js` |
@@ -99,6 +100,11 @@ Design Icons (Apache-2.0).
   filter, more) and of an app's own header (Calls), drawn from Teams' SVG
   icons, and those rows are hidden. Teams' list rows are restyled to phone
   sizes. These depend on Teams' DOM (`h1` in the list pane, `entity-header`).
+- Teams unmounts an app's view when another app opens and rebuilds it on the
+  way back (about 0.3s for Calls, up to 1.5s for Chat and Activity). The app
+  shows a snapshot of the tab as it was last left (PixelCopy, at most four
+  kept) until the page reports `app-ready`, like the native app showing its
+  cached list. The snapshot can be up to a few seconds stale.
 - Screen sharing sends about 10 JPEG frames per second at 1280 px and has no
   system audio.
 - Teams' own in-page ringtone can play alongside the system ringtone.
