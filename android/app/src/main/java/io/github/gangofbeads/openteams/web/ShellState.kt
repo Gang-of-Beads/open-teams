@@ -10,14 +10,21 @@ class ShellState(
     val detail: Boolean,
     /** Teams' title bar is showing for its search box or a menu. */
     val header: Boolean,
+    /** A Teams menu, dialog or temporarily shown header is open; Back closes it. */
+    val overlay: Boolean,
     val name: String,
     val email: String,
     val presence: String,
     val presenceColor: Int?,
     val topColor: Int?,
     val bottomColor: Int?,
+    /** The list header's buttons (new chat, filter, ...) for the native top bar. */
+    val actions: List<Action>,
 ) {
     class App(val id: String, val label: String, val selected: Boolean)
+
+    /** [id] is Teams' data-testid, e.g. "...-new-message-button" or "more-icon-btn". */
+    class Action(val index: Int, val id: String, val label: String, val viewBox: String, val path: String)
 
     val selectedApp get() = apps.firstOrNull { it.selected }
 
@@ -26,18 +33,25 @@ class ShellState(
             val apps = json.optJSONArray("apps")
             val profile = json.optJSONObject("profile") ?: JSONObject()
             val colors = json.optJSONObject("colors") ?: JSONObject()
+            val actions = json.optJSONArray("actions")
             return ShellState(
                 apps = (0 until (apps?.length() ?: 0)).mapNotNull { i ->
                     apps!!.optJSONObject(i)?.let { App(it.optString("id"), it.optString("label"), it.optBoolean("selected")) }
                 },
                 detail = json.optBoolean("detail"),
                 header = json.optBoolean("header"),
+                overlay = json.optBoolean("overlay"),
                 name = profile.optString("name"),
                 email = profile.optString("email"),
                 presence = profile.optString("presence"),
                 presenceColor = cssColor(profile.optString("presenceColor")),
                 topColor = cssColor(colors.optString("top")),
                 bottomColor = cssColor(colors.optString("bottom")),
+                actions = (0 until (actions?.length() ?: 0)).mapNotNull { i ->
+                    actions!!.optJSONObject(i)?.let {
+                        Action(it.optInt("index"), it.optString("id"), it.optString("label"), it.optString("viewBox"), it.optString("path"))
+                    }
+                },
             )
         }
 

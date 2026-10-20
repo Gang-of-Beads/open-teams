@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebMessageCompat
@@ -121,6 +122,10 @@ class WebBridge : WebViewCompat.WebMessageListener {
             "camera-state-changed" -> CallController.onCameraState(args.optBoolean(0))
             "call-control-result" -> args.optJSONObject(0)?.let {
                 CallController.onControlResult(it.optString("action"), it.optBoolean("handled"))
+            }
+            "show-keyboard" -> TeamsWeb.webView?.let {
+                it.requestFocus()
+                it.context.getSystemService(InputMethodManager::class.java).showSoftInput(it, 0)
             }
             "shell-state" -> args.optJSONObject(0)?.let {
                 val state = ShellState.parse(it)

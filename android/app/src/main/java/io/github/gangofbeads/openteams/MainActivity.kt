@@ -18,7 +18,11 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.transition.Fade
+import android.transition.TransitionManager
 import android.util.Rational
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -26,7 +30,9 @@ import android.view.WindowManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
@@ -135,7 +141,7 @@ class MainActivity : AppCompatActivity() {
                     binding.drawer.isDrawerOpen(GravityCompat.START) -> binding.drawer.closeDrawer(GravityCompat.START)
                     fullscreenCallback != null -> hideFullscreen()
                     // Back out of Teams' search/menus, then from a conversation to its list.
-                    state != null && (state.header || state.detail) -> TeamsWeb.bridge.emit("shell-back")
+                    state != null && (state.header || state.overlay || state.detail) -> TeamsWeb.bridge.emit("shell-back")
                     view != null && !TeamsHosts.isAppOrigin(Uri.parse(view.url ?: "")) && view.canGoBack() -> view.goBack()
                     else -> moveTaskToBack(true) // keep Teams running, like the native app
                 }
@@ -362,6 +368,11 @@ class MainActivity : AppCompatActivity() {
     private fun isDark(color: Int) = ColorUtils.calculateLuminance(color) < 0.4
 
     private var renderedApps = ""
+    private var renderedActions = ""
+    private var pendingApp: Pair<String, Long>? = null
+    private val selectableBorderless by lazy {
+        TypedValue().also { theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, it, true) }.resourceId
+    }
 
     private fun renderShell(state: ShellState) {
         val top = state.topColor ?: ContextCompat.getColor(this, R.color.nav_inactive)
@@ -370,9 +381,14 @@ class MainActivity : AppCompatActivity() {
         val onBar = if (dark) Color.WHITE else Color.parseColor("#242424")
         binding.mainFrame.setBackgroundColor(top)
         binding.topBar.setBackgroundColor(top)
-        binding.topTitle.text = state.selectedApp?.label.orEmpty()
+        // A tapped tab shows as selected at once, until Teams reports the switch.
+        val pending = pendingApp?.takeIf { (id, at) -> state.selectedApp?.id != id && SystemClock.uptimeMillis() - at < 1500 }?.first
+        if (pending == null) pendingApp = null
+        val selectedId = pending ?: state.selectedApp?.id
+        binding.topTitle.text = state.apps.firstOrNull { it.id == selectedId }?.label.orEmpty()
         binding.topTitle.setTextColor(onBar)
         binding.topSearch.imageTintList = ColorStateList.valueOf(onBar)
+        renderTopActions(if (pending != null) emptyList() else state.actions, onBar)
         WindowCompat.getInsetsController(window, binding.root).apply {
             isAppearanceLightStatusBars = !dark
             isAppearanceLightNavigationBars = !isDark(bottom)
@@ -406,19 +422,53 @@ class MainActivity : AppCompatActivity() {
             binding.bottomNav.removeAllViews()
             navItems.clear()
             state.apps.take(MAX_TABS).forEach { app ->
-                addNavItem(app.id, app.label, appIcon(app.id)) { TeamsWeb.bridge.emit("navigate-app", app.id) }
+                addNavItem(app.id, app.label, appIcon(app.id)) {
+                    pendingApp = app.id to SystemClock.uptimeMillis()
+                    shell?.let(::renderShell)
+                    TeamsWeb.bridge.emit("navigate-app", app.id)
+                }
             }
             addNavItem(MORE, getString(R.string.nav_more), R.drawable.ic_more_horiz) { showMoreSheet() }
         }
         binding.bottomNav.setBackgroundColor(bottom)
         val selected = ContextCompat.getColor(this, if (isDark(bottom)) R.color.brand_on_dark else R.color.brand_on_light)
         val normal = if (isDark(bottom)) Color.parseColor("#ADADAD") else Color.parseColor("#616161")
-        val selectedId = state.selectedApp?.id
         navItems.forEach { (id, item) ->
             val color = if (id == selectedId) selected else normal
             item.findViewById<ImageView>(R.id.icon).imageTintList = ColorStateList.valueOf(color)
             item.findViewById<TextView>(R.id.label).setTextColor(color)
             item.isSelected = id == selectedId
+        }
+    }
+
+    /**
+     * Teams' list header buttons (new chat, filter, more...) in the native top bar,
+     * drawn with Teams' own icons. Like an Android app bar, the overflow menu goes
+     * last; a 16-unit icon is the arrow half of a split button and stays narrow.
+     */
+    private fun renderTopActions(actions: List<ShellState.Action>, color: Int) {
+        val key = actions.joinToString("|") { "${it.index}${it.id}${it.label}${it.path.hashCode()}" } + color
+        if (key == renderedActions) return
+        renderedActions = key
+        binding.topActions.removeAllViews()
+        binding.topActionsEnd.removeAllViews()
+        val density = resources.displayMetrics.density
+        for (action in actions) {
+            val icon = when {
+                "filter" in action.id -> ContextCompat.getDrawable(this, R.drawable.ic_filter_list)?.mutate()?.apply { setTint(color) }
+                // Teams draws 20-unit icons at 20px; 1.2dp per unit gives a native 24dp action icon.
+                else -> PathIcon.from(action.path, action.viewBox, 1.2f, density)?.tint(color)
+            } ?: continue
+            val narrow = icon.intrinsicWidth < 20 * density
+            val button = ImageButton(this).apply {
+                setImageDrawable(icon)
+                setBackgroundResource(selectableBorderless)
+                contentDescription = action.label
+                tooltipText = action.label
+                setOnClickListener { TeamsWeb.bridge.emit("shell-action", "list:${action.index}") }
+            }
+            val params = LinearLayout.LayoutParams(((if (narrow) 28 else 48) * density).toInt(), (48 * density).toInt())
+            if ("more" in action.id) binding.topActionsEnd.addView(button, params) else binding.topActions.addView(button, params)
         }
     }
 
@@ -526,6 +576,12 @@ class MainActivity : AppCompatActivity() {
         // Like the native app: bars on the lists, none in an open conversation or a call.
         val state = shell
         val bars = state != null && !state.detail && !state.header && !inCall && !pip && !fullscreen
+        if (binding.topBar.isVisible != bars || binding.bottomNav.isVisible != (bars && !imeVisible)) {
+            TransitionManager.beginDelayedTransition(
+                binding.root,
+                Fade().setDuration(150).addTarget(binding.topBar).addTarget(binding.bottomNav),
+            )
+        }
         binding.topBar.isVisible = bars
         binding.bottomNav.isVisible = bars && !imeVisible
         binding.drawer.setDrawerLockMode(if (state != null) DrawerLayout.LOCK_MODE_UNLOCKED else DrawerLayout.LOCK_MODE_LOCKED_CLOSED)

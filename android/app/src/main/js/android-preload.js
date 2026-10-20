@@ -333,6 +333,8 @@ const SHELL = {
   searchPopup: '[data-tid="ms-searchux-popup"]',
   settings: '[data-tid="more-options-header"]',
   hamburger: '[data-tid="hamburger-button"]',
+  // The list pane: Chat and most apps use mid-nav, Activity uses sub-nav.
+  listPane: ':is([data-tid="app-layout-area--mid-nav"], [data-tid="app-layout-area--sub-nav"])',
 };
 
 // Hide Teams' title bar (the native top bar replaces it) unless one of its
@@ -343,6 +345,26 @@ html.ot-native:not(.ot-header) [data-tid="app-layout-area--nav"] { visibility: h
 html.ot-native [data-tid="app-layout-area--mid-nav"] h1,
 html.ot-native [data-tid="app-layout-area--sub-nav"] h1 { visibility: hidden; }
 html.ot-native [role="tooltip"] { display: none !important; } /* hover tooltips on a touch screen */
+html.ot-native, html.ot-native * { -webkit-tap-highlight-color: transparent; }
+/* The list's own header row: its buttons live in the native top bar. */
+html.ot-native:not(.ot-list) ${SHELL.listPane} :has(> h1) { display: none !important; }
+/* Collapsed rather than display: none, so appHeader() can still tell it is on screen. */
+html.ot-native:not(.ot-list):not(.ot-detail) [data-tid="app-layout-area--header"]:has(.ot-app-header) {
+  height: 0 !important; min-height: 0 !important; overflow: hidden !important; transition: none !important;
+}
+/* For its menus it stays invisible and out of the flow: the menu drops down at the top right, under the native button. */
+html.ot-native.ot-list-menu :is(${SHELL.listPane} :has(> h1), [data-tid="app-layout-area--header"]:has(.ot-app-header)) {
+  position: absolute !important; top: 0; left: 0; right: 0; opacity: 0; pointer-events: none;
+}
+/* Phone-sized list rows (Teams' desktop rows are 28-32px). */
+html.ot-native ${SHELL.listPane} [role="treeitem"]:not([aria-expanded]) { height: auto !important; }
+html.ot-native ${SHELL.listPane} [role="treeitem"]:not([aria-expanded]) > .fui-TreeItemLayout { min-height: 44px; font-size: 15px; }
+html.ot-native ${SHELL.listPane} [role="treeitem"]:not([aria-expanded]) > .fui-TreeItemLayout:has(.fui-Avatar) { min-height: 56px; }
+html.ot-native ${SHELL.listPane} [role="treeitem"][aria-expanded] > .fui-TreeItemLayout { min-height: 40px; }
+html.ot-native ${SHELL.listPane} .fui-TreeItemLayout .fui-Avatar,
+html.ot-native ${SHELL.listPane} .fui-TreeItemLayout .fui-Avatar img { width: 36px; height: 36px; }
+html.ot-native ${SHELL.listPane} .fui-TreeItemLayout { transition: background-color 120ms; }
+html.ot-native ${SHELL.listPane} .fui-TreeItemLayout:active { background-color: rgba(128, 128, 128, 0.18); }
 `;
 
 function visible(element) {
@@ -366,9 +388,11 @@ function onTop(element) {
 
 const appLabel = (button) => (button.getAttribute("aria-label") || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
 
-// "Header mode": the web title bar is shown while its search box, profile
-// menu, settings menu or expanded app rail is in use, then hidden again.
-let headerMode = false;
+// "Header mode": a hidden part of Teams' chrome is shown while it is in use,
+// then hidden again: "title" for the title bar (search box, profile and
+// settings menus, app rail), "list" for the list's header row (its menus and
+// filter box, opened from the native top bar's actions).
+let headerMode = "";
 let headerSince = 0;
 let headerIdlePolls = 0;
 
@@ -384,17 +408,106 @@ function collapseAppRail() {
   }
 }
 
-function setHeaderMode(on) {
-  if (!on) {
+function setHeaderMode(mode) {
+  if (!mode) {
     collapseAppRail();
   }
-  headerMode = on;
+  headerMode = mode;
   headerSince = Date.now();
   headerIdlePolls = 0;
-  document.documentElement.classList.toggle("ot-header", on);
+  document.documentElement.classList.toggle("ot-header", mode === "title");
+  document.documentElement.classList.toggle("ot-list", mode === "list");
+  document.documentElement.classList.remove("ot-list-menu");
+}
+
+// Opening a chat or activity item (or going back to the list) changes the
+// native bars at the tap, like a native screen transition, instead of once
+// Teams has rendered the new view a few hundred milliseconds later.
+const OPENS_ITEM = `${SHELL.listPane} :is([role="treeitem"]:not([aria-expanded]), [role="option"])`;
+let expectedView = null; // { detail, until }
+
+function expectView(detail, ms) {
+  expectedView = { detail, until: Date.now() + ms };
+  reportShell();
+}
+
+function shownDetail(actual) {
+  if (expectedView && (actual === expectedView.detail || Date.now() > expectedView.until)) {
+    expectedView = null;
+  }
+  return expectedView ? expectedView.detail : actual;
+}
+
+// A Teams menu or dialog is open: Back closes it, like a native popup.
+function overlayOpen() {
+  return [...document.querySelectorAll('[role="menu"], [role="dialog"]')].some(visible);
+}
+
+// The list's filter box (Chat's "Filter by person, chat or channel name").
+function listFilter() {
+  return [...document.querySelectorAll(`${SHELL.listPane} input`)].find(
+    (input) => visible(input) && !input.closest(".ot-list-header"),
+  );
+}
+
+// A native tap does not move Android's focus into the WebView, so the
+// keyboard would not come up for the box Teams just focused.
+function keyboardForFocus() {
+  setTimeout(() => {
+    const focused = document.activeElement;
+    if (focused?.matches?.("input, textarea, [contenteditable='true']")) {
+      ipcRenderer.send("show-keyboard");
+    }
+  }, 200);
+}
+
+// The list pane on screen; Teams keeps the panes of apps visited before mounted with no size.
+function visiblePane() {
+  return [...document.querySelectorAll(SHELL.listPane)].find((p) => p.getBoundingClientRect().width > 0);
+}
+
+// The header row (title, then buttons) of that list pane.
+function listHeader() {
+  return visiblePane()?.querySelector("h1")?.parentElement ?? null;
+}
+
+// Apps without a list pane (Calls) show their icon, title, tabs and buttons
+// in an entity header instead; on their top level the native bar replaces it.
+function appHeader() {
+  if (visiblePane()) {
+    return null;
+  }
+  return [...document.querySelectorAll('[data-tid="entity-header"]')].find(
+    (header) => header.parentElement.getBoundingClientRect().width > 0 && header.querySelector('[data-tid="entity-header-toolbar"]'),
+  ) ?? null;
+}
+
+// The header whose buttons the native top bar shows (see reportShell).
+let shellHeader = null;
+
+// The list header's buttons (new chat, filter, more...) with the icon Teams
+// draws for them, so the native top bar can show the same icons.
+function listActions(header) {
+  return [...(header?.querySelectorAll("button") ?? [])].slice(0, 4).map((button, index) => {
+    const svg = [...button.querySelectorAll("svg")].find((icon) => getComputedStyle(icon).display !== "none");
+    const path = [...(svg?.querySelectorAll("path") ?? [])].map((p) => p.getAttribute("d")).join(" ");
+    return {
+      index,
+      id: button.dataset.testid || button.dataset.tid || "",
+      label: button.getAttribute("aria-label") ?? "",
+      viewBox: svg?.getAttribute("viewBox") ?? "",
+      path,
+    };
+  }).filter((action) => action.path && action.viewBox);
 }
 
 function headerInUse() {
+  const header = shellHeader;
+  if (headerMode === "list") {
+    return Boolean(header?.contains(document.activeElement)) ||
+      [...(header?.querySelectorAll("input") ?? [])].some((input) => input.value) ||
+      overlayOpen();
+  }
   const titleBar = document.querySelector(SHELL.titleBar);
   return Boolean(titleBar?.contains(document.activeElement)) ||
     visible(document.querySelector(SHELL.searchPopup)) ||
@@ -403,28 +516,57 @@ function headerInUse() {
 }
 
 function shellAction(action) {
+  if (action.startsWith("list:")) {
+    const button = shellHeader?.querySelectorAll("button")[Number(action.slice(5))];
+    if (button?.getAttribute("aria-haspopup") === "menu") {
+      setHeaderMode("list");
+      document.documentElement.classList.add("ot-list-menu");
+      requestAnimationFrame(() => button.click());
+    } else if (button) {
+      button.click(); // new chat, filter: nothing to anchor in the header
+      keyboardForFocus();
+    }
+    return;
+  }
   const selector = { search: SHELL.search, status: SHELL.meTrigger, settings: SHELL.settings, apps: SHELL.hamburger }[action];
   const button = selector && document.querySelector(selector);
   if (!button) {
     return;
   }
-  setHeaderMode(true);
+  setHeaderMode("title");
   requestAnimationFrame(() => {
     button.click();
     if (action === "search") {
-      setTimeout(() => document.querySelector(SHELL.searchInput)?.focus(), 150);
+      setTimeout(() => {
+        document.querySelector(SHELL.searchInput)?.focus();
+        keyboardForFocus();
+      }, 150);
     }
   });
 }
 
 function shellBack() {
-  if (headerMode) {
-    document.activeElement?.blur?.();
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
-    setHeaderMode(false);
+  const filter = listFilter();
+  if (filter && !headerMode && !overlayOpen()) {
+    filter.focus();
+    filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
     return;
   }
-  document.querySelector(SHELL.back)?.click();
+  if (headerMode || overlayOpen()) {
+    (document.activeElement ?? document).dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }),
+    );
+    document.activeElement?.blur?.();
+    if (headerMode) {
+      setHeaderMode("");
+    }
+    return;
+  }
+  const back = document.querySelector(SHELL.back);
+  if (back) {
+    back.click();
+    expectView(false, 1000);
+  }
 }
 
 function navigateApp(id) {
@@ -493,11 +635,15 @@ globalThis.addEventListener("pointerdown", () => { userTouched = true; }, { capt
 
 function reportShell() {
   document.documentElement.classList.add("ot-native");
-  document.documentElement.classList.toggle("ot-header", headerMode);
+  document.documentElement.classList.toggle("ot-header", headerMode === "title");
+  document.documentElement.classList.toggle("ot-list", headerMode === "list");
+  for (const title of document.querySelectorAll(`${SHELL.listPane} h1`)) {
+    title.parentElement.classList.add("ot-list-header");
+  }
   if (headerMode) {
     headerIdlePolls = headerInUse() ? 0 : headerIdlePolls + 1;
     if (headerIdlePolls >= 2 && Date.now() - headerSince > 1500) {
-      setHeaderMode(false);
+      setHeaderMode("");
     }
   } else {
     collapseAppRail();
@@ -511,14 +657,20 @@ function reportShell() {
   if (shellReadyAt && !userTouched && Date.now() - shellReadyAt < 20000 && onTop(back)) {
     back.click();
   }
+  const detail = shownDetail(onTop(back));
+  document.documentElement.classList.toggle("ot-detail", detail);
+  shellHeader = listHeader() ?? (detail ? null : appHeader());
+  shellHeader?.classList.add(shellHeader.matches(`${SHELL.listPane} *`) ? "ot-list-header" : "ot-app-header");
   const state = {
     apps: [...document.querySelectorAll(SHELL.appButtons)].map((button) => ({
       id: button.dataset.tid,
       label: appLabel(button),
       selected: button.getAttribute("aria-pressed") === "true",
     })),
-    detail: onTop(back),
-    header: headerMode,
+    detail,
+    header: headerMode === "title",
+    overlay: Boolean(headerMode) || overlayOpen() || Boolean(listFilter()),
+    actions: listActions(shellHeader),
     profile: profile(),
     colors: { top: backgroundAt(innerWidth / 2, 2), bottom: backgroundAt(innerWidth / 2, innerHeight - 2) },
   };
@@ -689,11 +841,46 @@ ipcRenderer.invoke("get-config").then((config) => {
       style.textContent = SHELL_CSS;
       document.head.appendChild(style);
       document.documentElement.classList.add("ot-native");
-      setInterval(() => {
-        if (!document.hidden) {
-          reportShell();
+      // Follow Teams' DOM closely. Before the next paint an app's own header is
+      // hidden, so it never shows; the full report (native bars) runs at most
+      // every 50ms during bursts of changes.
+      let shellFrame = 0;
+      let shellTimer = 0;
+      let shellRanAt = 0;
+      const runShell = () => {
+        shellTimer = 0;
+        shellRanAt = performance.now();
+        reportShell();
+      };
+      const scheduleShell = () => {
+        if (shellFrame || document.hidden) {
+          return;
         }
-      }, 500);
+        shellFrame = requestAnimationFrame(() => {
+          shellFrame = 0;
+          if (!document.documentElement.classList.contains("ot-detail")) {
+            appHeader()?.classList.add("ot-app-header");
+          }
+          const wait = 50 - (performance.now() - shellRanAt);
+          if (wait <= 0) {
+            runShell();
+          } else if (!shellTimer) {
+            shellTimer = setTimeout(runShell, wait);
+          }
+        });
+      };
+      new MutationObserver(scheduleShell).observe(document.body, { childList: true, subtree: true });
+      globalThis.addEventListener("pointerup", scheduleShell, true);
+      globalThis.addEventListener(
+        "click",
+        (event) => {
+          if (event.target.closest?.(OPENS_ITEM) && !event.target.closest("button")) {
+            expectView(true, 1500);
+          }
+        },
+        true,
+      );
+      setInterval(scheduleShell, 1000);
     }
   };
   if (document.readyState === "loading") {

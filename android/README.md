@@ -49,8 +49,9 @@ The Android app adds:
 | --- | --- | --- |
 | `show-notification` | page → app | Notification shim (invoke) |
 | `media-permissions` | app → page | Android's camera/microphone grants, for `permissions.query()` |
-| `shell-state` / `profile-avatar` | page → app | Teams' pinned apps, selection, list/detail view, presence and theme colors for the native bars |
-| `navigate-app` / `shell-action` / `shell-back` | app → page | Native bars drive Teams: open an app by id, search, status, settings, all apps, back |
+| `shell-state` / `profile-avatar` | page → app | Teams' pinned apps, selection, list/detail view, open menus, presence, theme colors and the list header's buttons (with their SVG icons) for the native bars |
+| `navigate-app` / `shell-action` / `shell-back` | app → page | Native bars drive Teams: open an app by id, search, status, settings, all apps, a list header button (`list:<n>`), back |
+| `show-keyboard` | page → app | Teams focused a text box after a native tap; the app focuses the WebView and opens the keyboard |
 | `call-control` / `call-control-result` | both | In-call buttons; Teams shortcuts as a fallback |
 | `screen-share-start` / `screen-share-stop` / `screen-share-ended` | both | `getDisplayMedia()` |
 | `open-deep-link` / `deep-link-fallback` | both | In-page routing as in `deepLinkRouter.js` |
@@ -94,6 +95,10 @@ Design Icons (Apache-2.0).
   `setSinkId`); the native call bar's audio route button does that.
 - Teams reports its pre-join screen as a connected call; the app ends the
   native call if that screen closes without joining.
+- The native top bar shows the buttons of Teams' list header (new chat,
+  filter, more) and of an app's own header (Calls), drawn from Teams' SVG
+  icons, and those rows are hidden. Teams' list rows are restyled to phone
+  sizes. These depend on Teams' DOM (`h1` in the list pane, `entity-header`).
 - Screen sharing sends about 10 JPEG frames per second at 1280 px and has no
   system audio.
 - Teams' own in-page ringtone can play alongside the system ringtone.
