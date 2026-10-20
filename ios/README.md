@@ -22,10 +22,10 @@ share code with the desktop app under `app/`, and none of the desktop features
 
 ## Download a prebuilt ipa
 
-The [iOS workflow](../.github/workflows/ios.yml) builds an unsigned `.ipa` for
-every pull request and push to `main` that touches `ios/` (download it from
-the run's `ios-ipa` artifact). Tags named `ios-vX.Y.Z` publish it as a GitHub
-pre-release, named "iOS X.Y.Z", with a SHA-256 checksum.
+Prebuilt ipas are published on the repository's GitHub Releases page as
+"iOS X.Y.Z" pre-releases, each with a SHA-256 checksum. The
+[iOS workflow](../.github/workflows/ios.yml) runs only when an `ios-vX.Y.Z`
+tag is pushed; pull requests and pushes to `main` do not build the iOS app.
 
 The ipa is unsigned: install it with [SideStore](https://sidestore.io),
 AltStore or Sideloadly, which re-sign it with your Apple ID. With a free

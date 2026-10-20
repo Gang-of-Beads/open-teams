@@ -1,32 +1,22 @@
 name: iOS
 
 # Builds the experimental iOS wrapper in ios/ as an unsigned .ipa for
-# sideloading (SideStore, AltStore, Sideloadly re-sign it on install).
-# Pushing an ios-v* tag (for example ios-v0.1.0) also publishes the ipa as a
-# GitHub pre-release. It is never marked latest, so releases/latest keeps
-# pointing at the desktop app's release-please release.
+# sideloading (SideStore, AltStore, Sideloadly re-sign it on install) and
+# publishes it as a GitHub pre-release. Runs only when an ios-v* tag (for
+# example ios-v0.1.0) is pushed. The release is never marked latest, so
+# releases/latest keeps pointing at the desktop app's release-please release.
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "ios/**"
-      - ".github/workflows/ios.yml"
     tags:
       - "ios-v*"
-  pull_request:
-    paths:
-      - "ios/**"
-      - ".github/workflows/ios.yml"
-  workflow_dispatch:
 
 # Restrict default permissions — each job declares only what it needs
 permissions: {}
 
 concurrency:
   group: ios-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -48,30 +38,18 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      # Tag builds take the version from the tag; other builds keep the
-      # project's MARKETING_VERSION and add the short commit for traceability.
+      # The app version comes from the tag: ios-v1.2.3 builds 1.2.3.
       - name: Determine version
         id: version
         env:
-          REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
-          # On pull requests GITHUB_SHA is the temporary merge commit.
-          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          if [[ "$REF" == refs/tags/ios-v* ]]; then
-            version="${REF_NAME#ios-v}"
-            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-              echo "::error::Tag $REF_NAME must look like ios-v1.2.3"
-              exit 1
-            fi
-            label="$version"
-          else
-            version=$(xcodebuild -project ios/OpenTeams.xcodeproj -target OpenTeams -configuration Release \
-              -showBuildSettings 2>/dev/null | awk -F' = ' '/ MARKETING_VERSION = / { print $2; exit }')
-            label="$version-${COMMIT::7}"
+          version="${REF_NAME#ios-v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::Tag $REF_NAME must look like ios-v1.2.3"
+            exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "label=$label" >> "$GITHUB_OUTPUT"
 
       - name: Build unsigned Release app
         env:
@@ -94,11 +72,11 @@ jobs:
       - name: Package ipa
         id: package
         env:
-          LABEL: ${{ steps.version.outputs.label }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           app="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/OpenTeams.app"
           stage="$RUNNER_TEMP/ipa"
-          ipa="OpenTeams-$LABEL.ipa"
+          ipa="OpenTeams-$VERSION.ipa"
           mkdir -p "$stage/Payload" dist
           cp -R "$app" "$stage/Payload/"
           codesign --force --sign - --timestamp=none "$stage/Payload/OpenTeams.app"
@@ -116,7 +94,6 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/ios-v')
     needs: build
     runs-on: ubuntu-latest
     permissions:
