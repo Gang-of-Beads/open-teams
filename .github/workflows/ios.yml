@@ -55,6 +55,8 @@ jobs:
         env:
           REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
+          # On pull requests GITHUB_SHA is the temporary merge commit.
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           if [[ "$REF" == refs/tags/ios-v* ]]; then
             version="${REF_NAME#ios-v}"
@@ -66,7 +68,7 @@ jobs:
           else
             version=$(xcodebuild -project ios/OpenTeams.xcodeproj -target OpenTeams -configuration Release \
               -showBuildSettings 2>/dev/null | awk -F' = ' '/ MARKETING_VERSION = / { print $2; exit }')
-            label="$version-${GITHUB_SHA::7}"
+            label="$version-${COMMIT::7}"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "label=$label" >> "$GITHUB_OUTPUT"
