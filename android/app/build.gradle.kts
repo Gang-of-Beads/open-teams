@@ -23,8 +23,9 @@ android {
         applicationId = "io.github.gangofbeads.openteams"
         minSdk = 29
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        // CI overrides both from the release tag.
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 2
+        versionName = project.findProperty("versionName") as String? ?: "0.2.0"
     }
 
     signingConfigs {

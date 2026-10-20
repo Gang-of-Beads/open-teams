@@ -1,0 +1,28 @@
+{
+  "id": "b5a55808c",
+  "name": "npm ci + lint + tests",
+  "command": "cd /home/hxd/vincent/projects/open-teams && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --ignore-scripts 2>&1 | tail -3 && npm run lint 2>&1 | tail -15 && npm run test:unit 2>&1 | tail -15",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b5a55808c.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792492814092,
+  "endTime": 1792492850974,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2733581,
+  "bytesWritten": 1697,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 1800,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

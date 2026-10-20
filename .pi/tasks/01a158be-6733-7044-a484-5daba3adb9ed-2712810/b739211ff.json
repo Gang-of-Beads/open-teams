@@ -1,0 +1,29 @@
+{
+  "id": "b739211ff",
+  "name": "Install Android SDK",
+  "command": "set -e; D=~/.local/share/open-teams-android; cd $D; export JAVA_HOME=$D/jdk17; U=$(curl -fsSL https://dl.google.com/android/repository/repository2-3.xml | grep -o 'commandlinetools-linux-[0-9]*_latest.zip' | head -1); echo $U; curl -fL -o clt.zip https://dl.google.com/android/repository/$U; mkdir -p sdk/cmdline-tools; rm -rf sdk/cmdline-tools/latest; unzip -q clt.zip -d sdk/cmdline-tools; mv sdk/cmdline-tools/cmdline-tools sdk/cmdline-tools/latest; yes | sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$D/sdk --licenses >/dev/null; sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$D/sdk \"platform-tools\" \"platforms;android-35\" \"build-tools;35.0.0\" | tail -3; ls sdk",
+  "status": "failed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b739211ff.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792490700852,
+  "endTime": 1792490722371,
+  "exitCode": 127,
+  "signal": null,
+  "pid": 2723055,
+  "bytesWritten": 2026,
+  "isAgent": false,
+  "surviveReload": false,
+  "error": "Exited with code 127",
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 1800,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

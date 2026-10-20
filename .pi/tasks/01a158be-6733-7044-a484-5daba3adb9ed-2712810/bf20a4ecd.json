@@ -1,0 +1,27 @@
+{
+  "id": "bf20a4ecd",
+  "name": "S23 web mirror (low bitrate)",
+  "command": "sleep 2; rm -f /tmp/.X77-lock; sh ~/.local/share/open-teams-android/phone-web.sh",
+  "status": "killed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/bf20a4ecd.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792503085371,
+  "endTime": 1792503279860,
+  "exitCode": null,
+  "signal": "SIGSEGV",
+  "pid": 2786685,
+  "bytesWritten": 2509,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

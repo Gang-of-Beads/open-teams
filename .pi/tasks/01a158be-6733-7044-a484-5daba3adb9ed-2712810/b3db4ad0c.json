@@ -1,0 +1,28 @@
+{
+  "id": "b3db4ad0c",
+  "name": "Install emulator image",
+  "command": "D=~/.local/share/open-teams-android; export JAVA_HOME=$D/jdk17; yes | $D/sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$D/sdk \"emulator\" \"system-images;android-35;google_apis;x86_64\" 2>&1 | tail -3 && echo no | $D/sdk/cmdline-tools/latest/bin/avdmanager create avd -n ot35 -k \"system-images;android-35;google_apis;x86_64\" -d pixel_7 --force 2>&1 | tail -2; ls ~/.android/avd",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b3db4ad0c.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792492802920,
+  "endTime": 1792492865059,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2733431,
+  "bytesWritten": 383,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 2400,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

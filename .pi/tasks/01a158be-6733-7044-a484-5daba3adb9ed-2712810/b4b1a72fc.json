@@ -1,0 +1,28 @@
+{
+  "id": "b4b1a72fc",
+  "name": "Android emulator (guest gpu 2)",
+  "command": "D=~/.local/share/open-teams-android; export ANDROID_HOME=$D/sdk ANDROID_SDK_ROOT=$D/sdk; $D/sdk/emulator/emulator -avd ot35 -no-window -no-audio -no-boot-anim -gpu guest -feature -Vulkan -no-snapshot-save -memory 4096 -cores 4 > /tmp/emulator.log 2>&1; echo \"emulator exit $?\"",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b4b1a72fc.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792494199485,
+  "endTime": 1792494229764,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2748021,
+  "bytesWritten": 18,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 7200,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

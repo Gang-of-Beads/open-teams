@@ -1,0 +1,9 @@
+npm warn install-scripts   frida@17.23.2 (install: node scripts/install.js)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0  0      0   0      0   0      0      0      0                              0  0      0   0      0   0      0      0      0                              0
+  0      0   0      0   0      0      0      0                              0 49 40.64M  49 20.10M   0      0 11.69M      0   00:03   00:01   00:02 14.72M100 40.64M 100 40.64M   0      0 17.45M      0   00:02   00:02         14.72M100 40.64M 100 40.64M   0      0 17.45M      0   00:02   00:02         14.72M100 40.64M 100 40.64M   0      0 17.45M      0   00:02   00:02         14.72M
+jadx-headless-mcp-0.7.1-all.jar: OK
+6.7.0

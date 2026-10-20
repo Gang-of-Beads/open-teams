@@ -1,0 +1,28 @@
+{
+  "id": "b36e1c580",
+  "name": "Install rea + JADX",
+  "command": "set -e; D=~/.local/share/open-teams-android; mkdir -p $D/rea && cd $D/rea; npm init -y >/dev/null; npm install rea-agents@latest 2>&1 | tail -3; curl -fL -o jadx-headless-mcp-0.7.1-all.jar https://github.com/1013503897/jadx-headless-mcp/releases/download/v0.7.1/jadx-headless-mcp-0.7.1-all.jar; echo '6e5eacf500b64292bfb73c49797c1958f6ee44646e43e868039ae7feb573ff75  jadx-headless-mcp-0.7.1-all.jar' | sha256sum -c -; ./node_modules/.bin/rea --version",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b36e1c580.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792490700870,
+  "endTime": 1792490726721,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2723063,
+  "bytesWritten": 1039,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 1800,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

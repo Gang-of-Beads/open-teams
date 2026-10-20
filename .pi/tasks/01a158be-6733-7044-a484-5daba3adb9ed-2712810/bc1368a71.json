@@ -1,0 +1,28 @@
+{
+  "id": "bc1368a71",
+  "name": "JADX resource export",
+  "command": "cd ~/.local/share/open-teams-android && nix build nixpkgs#jadx --out-link jadx && export JAVA_HOME=$PWD/jdk17 && JAVA_OPTS=-Xmx12g ./jadx/bin/jadx --no-src -d res-export apk/com.microsoft.teams@arm64-v8a.apk > analysis/jadx-res.log 2>&1; tail -3 analysis/jadx-res.log; ls res-export/resources | head",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/bc1368a71.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792491017240,
+  "endTime": 1792491108139,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2725022,
+  "bytesWritten": 12762,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 2400,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

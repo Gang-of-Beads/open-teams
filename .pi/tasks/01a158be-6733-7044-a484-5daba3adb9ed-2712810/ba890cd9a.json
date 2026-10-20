@@ -1,0 +1,28 @@
+{
+  "id": "ba890cd9a",
+  "name": "Gradle assembleDebug",
+  "command": "cd /home/hxd/vincent/projects/open-teams/android && D=~/.local/share/open-teams-android && echo \"sdk.dir=$D/sdk\" > local.properties && export JAVA_HOME=$D/jdk17 ANDROID_HOME=$D/sdk && ./gradlew --no-daemon assembleDebug 2>&1 | tail -80",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/ba890cd9a.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792492535910,
+  "endTime": 1792492596672,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2731068,
+  "bytesWritten": 2152,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 2400,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

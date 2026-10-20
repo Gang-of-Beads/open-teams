@@ -1,0 +1,28 @@
+{
+  "id": "b13c246f8",
+  "name": "Download Teams APK",
+  "command": "cd ~/.local/share/open-teams-android && ./apkeep/bin/apkeep -a com.microsoft.teams -d apk-pure -o 'acknowledge_dangers=true,arch=arm64-v8a' apk && ls -la apk",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b13c246f8.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792490700831,
+  "endTime": 1792490716318,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2723037,
+  "bytesWritten": 302,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 1800,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

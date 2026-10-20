@@ -1,0 +1,33 @@
+  npm audit fix --force
+
+Run `npm audit` for details.
+   654:73  error  'process' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   762:55  error  'exports' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   762:64  error  'require' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   762:73  error  'process' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   805:70  error  'process' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  1562:63  error  'process' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  1909:48  error  'exports' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  1909:57  error  'require' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  1909:66  error  'process' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+/home/hxd/vincent/projects/open-teams/android/app/src/main/js/android-preload.js
+  104:19  error  '__otModules' is not defined  no-undef
+
+✖ 35 problems (35 errors, 0 warnings)
+
+  ✔ blocks a webview attach on any webContents created after install (0.471237ms)
+  ✔ is installed at startup (0.246784ms)
+✔ installWebviewGuard (GHSA-6xpg-fhf9-chcr) (1.374119ms)
+▶ webviewTag stays disabled
+  ✔ is false in browserWindowManager.js (0.226677ms)
+  ✔ is false in profileViewManager.js (0.19015ms)
+✔ webviewTag stays disabled (0.580198ms)
+ℹ tests 1029
+ℹ suites 164
+ℹ pass 1028
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 27746.268202

@@ -1,0 +1,29 @@
+{
+  "id": "b6a59e022",
+  "name": "Wait for phone auth + install",
+  "command": "ADB=\"$HOME/.local/share/open-teams-android/sdk/platform-tools/adb\"; for i in $(seq 1 300); do s=$($ADB devices | awk '/R5CWA2LF04E/{print $2}'); [ \"$s\" = \"device\" ] && break; sleep 2; done; echo \"state=$s\"; [ \"$s\" = \"device\" ] || exit 1; A=\"$ADB -s R5CWA2LF04E\"; $A shell getprop ro.product.model; $A shell getprop ro.build.version.release; $A shell dumpsys webviewupdate | grep -E \"Current WebView package\" | head -1; $A install -r /home/hxd/vincent/projects/open-teams/android/app/build/outputs/apk/debug/app-debug.apk && $A shell am start -n io.github.gangofbeads.openteams/.MainActivity",
+  "status": "failed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b6a59e022.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792500549830,
+  "endTime": 1792501155364,
+  "exitCode": 1,
+  "signal": null,
+  "pid": 2770512,
+  "bytesWritten": 96,
+  "isAgent": false,
+  "surviveReload": false,
+  "error": "Exited with code 1",
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 700,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

@@ -1,0 +1,42 @@
+/nix/store/hjnm2ipqm18m5j1m8jwwz7ypwiwpwqi0-scrcpy-5.0.1/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 446.0 MB/s (733930 bytes in 0.002s)
+2026-10-20T13:40:21.021Z scrcpy-server pushed
+2026-10-20T13:40:21.034Z listening on http://127.0.0.1:6090
+2026-10-20T13:40:30.826Z HTTP GET / | curl/8.22.0
+2026-10-20T13:40:32.875Z HTTP GET / | curl/8.22.0
+2026-10-20T13:40:39.503Z HTTP GET / | Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36
+2026-10-20T13:40:39.525Z HTTP POST /log | Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36
+2026-10-20T13:40:39.527Z CLIENT {"caps":{"ua":"Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36","secure":true,"webcodecs":"function","ws":"function","w":412,"h":915,"dpr":2.625}}
+2026-10-20T13:40:39.532Z HTTP GET /favicon.ico | Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36
+2026-10-20T13:40:39.534Z WS connected {"maxSize":1280,"maxFps":30,"bitRate":4000000} | Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36
+2026-10-20T13:40:39.780Z [device] [server] INFO: Device: [samsung] samsung SM-S918B (Android 16)
+2026-10-20T13:40:40.020Z streaming SM-S918B codec 68323634
+2026-10-20T13:40:40.175Z HTTP POST /log | Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36
+2026-10-20T13:40:40.176Z CLIENT {"firstFrame":"avc1.640020"}
+2026-10-20T13:41:16.420Z WS closed
+adb: error: listener 'tcp:42289' not found
+adb: error: listener 'tcp:42289' not found
+adb: error: listener 'tcp:42289' not found
+2026-10-20T13:42:25.546Z HTTP GET / | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:42:25.728Z HTTP POST /log | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:42:25.728Z CLIENT {"caps":{"ua":"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36","secure":true,"webcodecs":"function","ws":"function","w":384,"h":742,"dpr":3.75}}
+2026-10-20T13:42:25.760Z HTTP GET /favicon.ico | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:42:25.761Z WS connected {"maxSize":1280,"maxFps":30,"bitRate":4000000} | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+adb: error: listener 'tcp:42289' not found
+2026-10-20T13:42:26.291Z [device] Aborted
+2026-10-20T13:42:26.351Z HTTP POST /log | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:42:26.351Z CLIENT {"wsClose":1005}
+adb: error: listener 'tcp:36813' not found
+2026-10-20T13:42:26.377Z WS closed
+2026-10-20T13:42:30.569Z HTTP GET / | Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:24.0) Gecko/20100101 Firefox/24.0 Chrome/80.0.3987.132 Safari/537.36
+2026-10-20T13:42:31.895Z HTTP GET / | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:42:31.974Z HTTP POST /log | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:42:31.976Z CLIENT {"caps":{"ua":"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36","secure":true,"webcodecs":"function","ws":"function","w":384,"h":742,"dpr":3.75}}
+2026-10-20T13:42:32.025Z WS connected {"maxSize":1280,"maxFps":30,"bitRate":4000000} | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+adb: error: listener 'tcp:36813' not found
+2026-10-20T13:42:32.478Z [device] Aborted
+adb: error: listener 'tcp:35751' not found
+2026-10-20T13:42:32.554Z WS closed
+2026-10-20T13:42:32.554Z HTTP POST /log | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:42:32.554Z CLIENT {"wsClose":1005}
+2026-10-20T13:42:35.892Z session error scrcpy server did not start
+2026-10-20T13:42:42.167Z session error scrcpy server did not start

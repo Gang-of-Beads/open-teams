@@ -1,0 +1,140 @@
+name: Android
+
+# Builds the experimental Android wrapper in android/ as a signed release APK
+# and publishes it as a GitHub pre-release. Runs only when an android-v* tag
+# (for example android-v0.2.0) is pushed. Like the iOS workflow, the release is
+# never marked latest, so releases/latest keeps pointing at the desktop app's
+# release-please release.
+
+on:
+  push:
+    tags:
+      - "android-v*"
+
+# Restrict default permissions — each job declares only what it needs
+permissions: {}
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      apk: ${{ steps.package.outputs.apk }}
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+
+      - name: Cache Gradle
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.gradle/caches
+          key: gradle-${{ hashFiles('android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      # The app version comes from the tag: android-v1.2.3 builds 1.2.3.
+      - name: Determine version
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version="${REF_NAME#android-v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "::error::Tag $REF_NAME must look like android-v1.2.3"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build release APK
+        working-directory: android
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          ./gradlew assembleRelease lintRelease \
+            -PversionName="$VERSION" -PversionCode="$BUILD_NUMBER"
+
+      # The signing key is committed, so the APK installs over earlier releases
+      # and no secrets are needed here.
+      - name: Package apk
+        id: package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          apk="open-teams-$VERSION.apk"
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/$apk"
+          (cd dist && sha256sum "$apk" > "$apk.sha256")
+          cat android/app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt | head -5
+          ls -l dist
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload apk artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-apk
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download apk artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-apk
+          path: dist
+
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          APK: ${{ needs.build.outputs.apk }}
+        run: |
+          notes=$(cat <<EOF
+          Experimental Android build of Open Teams (native shell around Teams web).
+
+          **Not the desktop app.** Released for phones where the official Teams app cannot sign in without Intune: a tenant policy that requires a managed, registered device. Calls go through Android Telecom, and notifications are native.
+
+          Requires Android 10 or later. Signed with the committed release key, so it installs over earlier releases.
+
+          See [android/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/android/README.md) for setup, permissions and known limitations.
+
+          SHA-256: \`$(cut -d' ' -f1 "dist/$APK.sha256")\`
+          EOF
+          )
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Android $VERSION" \
+              --notes "$notes" \
+              --prerelease \
+              --latest=false \
+              --verify-tag
+          fi

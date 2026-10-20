@@ -4,6 +4,21 @@ An Android build of open-teams (Teams for Linux). Like the desktop app, it runs
 the Teams web app and reuses open-teams' browser modules. Calls, notifications,
 navigation and screen sharing are native Android features.
 
+## Releasing
+
+Commit everything, then push a tag; the `Android` workflow builds and
+publishes it as a GitHub pre-release (never "latest", which stays with the
+desktop app's release):
+
+```sh
+git tag android-v0.2.0
+git push origin android-v0.2.0
+```
+
+The tag's version becomes the `versionName`, so it must look like
+`android-v1.2.3`. Never change the signing key: a new one forces an uninstall,
+which drops the Teams sign-in.
+
 ## Building
 
 Release builds are signed with the key in `keystore/open-teams.jks` (password

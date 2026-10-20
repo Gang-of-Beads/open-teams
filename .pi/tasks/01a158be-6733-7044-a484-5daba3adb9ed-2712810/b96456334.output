@@ -1,0 +1,10 @@
+WARNING      | Feature QuickbootFileBacked is disabled due to stability issues, if you really want that, the environment variable ANDROID_EMU_FORCE_QUICKBOOT_FILE_BACKED need to set to 1
+ERROR        | Unable to connect to adb daemon on port: 5037
+WARNING      | Could not open libX11.so, try libX11.so.6
+WARNING      | Could not open libX11-xcb.so, try libX11-xcb.so.1
+WARNING: cannnot unmap ptr 0x72e73b001000 as it is in the protected range from 0x72e63b000000 to 0x72e73b200000
+pc_memory_init: above 4g size: 40000000
+WARNING      | The emulator now requires a signed jwt token for gRPC access! Use the -grpc flag if you really want an open unprotected grpc port
+USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.
+WARNING      | Failed to process .ini file /home/hxd/.android/emu-update-last-check.ini for reading.
+WARNING      | Failed to process .ini file /home/hxd/.android/emu-update-last-check.ini for reading.

@@ -1,0 +1,25 @@
+2026-10-20T13:44:08.227Z listening on http://127.0.0.1:6090
+2026-10-20T13:44:10.305Z WS connected {"maxSize":1280,"maxFps":30,"bitRate":4000000} | node
+/nix/store/hjnm2ipqm18m5j1m8jwwz7ypwiwpwqi0-scrcpy-5.0.1/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 495.6 MB/s (733930 bytes in 0.001s)
+2026-10-20T13:44:10.638Z [device] [server] INFO: Device: [samsung] samsung SM-S918B (Android 16)
+2026-10-20T13:44:10.872Z streaming SM-S918B codec 68323634
+2026-10-20T13:44:13.319Z WS closed
+2026-10-20T13:44:14.106Z WS connected {"maxSize":1280,"maxFps":30,"bitRate":4000000} | node
+/nix/store/hjnm2ipqm18m5j1m8jwwz7ypwiwpwqi0-scrcpy-5.0.1/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 562.8 MB/s (733930 bytes in 0.001s)
+2026-10-20T13:44:14.367Z [device] [server] INFO: Device: [samsung] samsung SM-S918B (Android 16)
+2026-10-20T13:44:14.536Z streaming SM-S918B codec 68323634
+2026-10-20T13:44:17.119Z WS closed
+2026-10-20T13:44:17.909Z WS connected {"maxSize":1280,"maxFps":30,"bitRate":4000000} | node
+/nix/store/hjnm2ipqm18m5j1m8jwwz7ypwiwpwqi0-scrcpy-5.0.1/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 503.2 MB/s (733930 bytes in 0.001s)
+2026-10-20T13:44:18.182Z [device] [server] INFO: Device: [samsung] samsung SM-S918B (Android 16)
+2026-10-20T13:44:18.425Z streaming SM-S918B codec 68323634
+2026-10-20T13:44:20.917Z WS closed
+2026-10-20T13:44:35.465Z HTTP GET / | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:44:35.709Z HTTP POST /log | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:44:35.709Z CLIENT {"caps":{"ua":"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36","secure":true,"webcodecs":"function","ws":"function","w":384,"h":742,"dpr":3.75}}
+2026-10-20T13:44:35.742Z WS connected {"maxSize":1280,"maxFps":30,"bitRate":4000000} | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+/nix/store/hjnm2ipqm18m5j1m8jwwz7ypwiwpwqi0-scrcpy-5.0.1/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 403.0 MB/s (733930 bytes in 0.002s)
+2026-10-20T13:44:36.056Z [device] [server] INFO: Device: [samsung] samsung SM-S918B (Android 16)
+2026-10-20T13:44:36.278Z streaming SM-S918B codec 68323634
+2026-10-20T13:44:36.653Z HTTP POST /log | Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+2026-10-20T13:44:36.654Z CLIENT {"firstFrame":"avc1.640020"}

@@ -1,0 +1,28 @@
+{
+  "id": "be18f788f",
+  "name": "Android emulator (2)",
+  "command": "D=~/.local/share/open-teams-android; export ANDROID_HOME=$D/sdk ANDROID_SDK_ROOT=$D/sdk; $D/sdk/emulator/emulator -avd ot35 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-save -memory 4096 -cores 4 > /tmp/emulator.log 2>&1; echo \"emulator exit $?\"; tail -30 /tmp/emulator.log",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/be18f788f.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792493376631,
+  "endTime": 1792493409282,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2741031,
+  "bytesWritten": 2228,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 7200,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

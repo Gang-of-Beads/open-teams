@@ -1,0 +1,24 @@
+{
+  "id": "b76a70024",
+  "name": "Web scrcpy server",
+  "command": "cd ~/.local/share/open-teams-android/webscrcpy && SCRCPY_SERVER=$(readlink -f ../tool-scrcpy)/share/scrcpy/scrcpy-server node server.mjs",
+  "status": "running",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b76a70024.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792503950887,
+  "pid": 2791293,
+  "bytesWritten": 0,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": false,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

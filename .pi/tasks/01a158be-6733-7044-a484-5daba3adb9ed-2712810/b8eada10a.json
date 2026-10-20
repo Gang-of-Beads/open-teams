@@ -1,0 +1,28 @@
+{
+  "id": "b8eada10a",
+  "name": "Android emulator (angle)",
+  "command": "D=~/.local/share/open-teams-android; export ANDROID_HOME=$D/sdk ANDROID_SDK_ROOT=$D/sdk; $D/sdk/emulator/emulator -avd ot35 -no-window -no-audio -no-boot-anim -gpu angle_indirect -no-snapshot -memory 4096 -cores 4 > /tmp/emulator.log 2>&1; echo \"emulator exit $?\"",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b8eada10a.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792494878956,
+  "endTime": 1792495166436,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2750840,
+  "bytesWritten": 16,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 7200,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}

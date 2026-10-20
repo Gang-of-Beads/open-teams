@@ -1,0 +1,53 @@
+The XKEYBOARD keymap compiler (xkbcomp) reports:
+> Warning:          Multiple symbols for level 1/group 1 on key <FK23>
+>                   Using F23, ignoring XF86TouchpadOff
+> Warning:          Symbol map for key <FK23> redefined
+>                   Using last definition for conflicting fields
+> Warning:          Symbol map for key <FK24> redefined
+>                   Using last definition for conflicting fields
+> Warning:          Could not resolve keysym XF86ElectronicPrivacyScreenOn
+> Warning:          Could not resolve keysym XF86ElectronicPrivacyScreenOff
+> Warning:          Could not resolve keysym XF86ActionOnSelection
+> Warning:          Could not resolve keysym XF86ContextualInsert
+> Warning:          Could not resolve keysym XF86ContextualQuery
+Errors from xkbcomp are not fatal to the X server
+Warning: could not find self.pem
+Using installed websockify at /nix/store/pa7yi3pzv8qabkdvbxvrdsk0yi4jdxfk-python3.14-websockify-0.13.0/bin/websockify
+Starting webserver and WebSockets proxy on host 127.0.0.1 port 6080
+Xlib:  extension "DPMS" missing on display ":77".
+
+The VNC desktop is:      localhost:77
+PORT=5977
+/nix/store/hjnm2ipqm18m5j1m8jwwz7ypwiwpwqi0-scrcpy-5.0.1/share/scrcpy/scrcpy-server: 1 file pushed, 0 skipped. 293.4 MB/s (733930 bytes in 0.002s)
+WebSocket server settings:
+  - Listen on 127.0.0.1:6080
+  - Web server. Web root: /nix/store/a7s86nv7q52kv698z62jm01zxfpqjhy7-novnc-1.7.0/share/webapps/novnc
+  - No SSL/TLS support (no cert file)
+  - proxying from 127.0.0.1:6080 to 127.0.0.1:5977
+[server] INFO: Device: [samsung] samsung SM-S918B (Android 16)
+
+
+Navigate to this URL:
+
+    http://127.0.0.1:6080/vnc.html?host=127.0.0.1&port=6080
+
+Press Ctrl-C to exit
+
+
+caught signal: 15
+
+Terminating WebSockets proxy (2779957)
+XIO:  fatal IO error 4 (Interrupted system call) on X server ":77"
+      after 2444 requests (2444 known processed) with 0 events remaining.
+XIO:  fatal IO error 4 (Interrupted system call) on X server ":77"
+      after 1015 requests (1015 known processed) with 0 events remaining.
+In exit
+scrcpy 5.0.1 <https://github.com/Genymobile/scrcpy>
+INFO: ADB device found:
+INFO:     -->   (usb)  R5CWA2LF04E                     device  SM_S918B
+INFO: Renderer: software
+INFO: VA-API not available: the renderer is not OpenGL or OpenGL ES
+INFO: VA-API interop unavailable
+INFO: Interop: software
+INFO: Video decoding: software
+INFO: Texture: 746x1600

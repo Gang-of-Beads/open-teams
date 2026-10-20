@@ -1,0 +1,28 @@
+{
+  "id": "b6a685564",
+  "name": "Install Android SDK (retry)",
+  "command": "set -e; D=~/.local/share/open-teams-android; cd $D; export JAVA_HOME=$D/jdk17 PATH=$D/unzip/bin:$PATH; mkdir -p sdk/cmdline-tools; rm -rf sdk/cmdline-tools/latest sdk/cmdline-tools/cmdline-tools; unzip -q clt.zip -d sdk/cmdline-tools; mv sdk/cmdline-tools/cmdline-tools sdk/cmdline-tools/latest; yes | sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$D/sdk --licenses >/dev/null; sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$D/sdk \"platform-tools\" \"platforms;android-36\" \"build-tools;36.0.0\" | tail -3; ls sdk",
+  "status": "completed",
+  "outputPath": ".pi/tasks/01a158be-6733-7044-a484-5daba3adb9ed-2712810/b6a685564.output",
+  "cwd": "/home/hxd/vincent/projects/open-teams",
+  "startTime": 1792490910727,
+  "endTime": 1792490930134,
+  "exitCode": 0,
+  "signal": null,
+  "pid": 2724309,
+  "bytesWritten": 1753,
+  "isAgent": false,
+  "surviveReload": false,
+  "notified": true,
+  "notifyOnCompletion": true,
+  "triggerOnCompletion": true,
+  "timeoutSeconds": 1800,
+  "shellPolicy": {
+    "policy": "inherit",
+    "executable": "/home/hxd/.nix-profile/bin/zsh",
+    "argvPrefix": [
+      "-c"
+    ],
+    "dialect": "posix"
+  }
+}
