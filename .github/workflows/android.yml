@@ -29,6 +29,7 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      code: ${{ steps.version.outputs.code }}
       apk: ${{ steps.package.outputs.apk }}
 
     steps:
@@ -62,16 +63,19 @@ jobs:
             echo "::error::Tag $REF_NAME must look like android-v1.2.3"
             exit 1
           fi
+          # Same monotonic scheme everywhere: 1.2.3 -> 10203.
+          IFS=. read -r major minor patch <<< "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$((major * 10000 + minor * 100 + ${patch:-0}))" >> "$GITHUB_OUTPUT"
 
       - name: Build release APK
         working-directory: android
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          BUILD_NUMBER: ${{ github.run_number }}
+          CODE: ${{ steps.version.outputs.code }}
         run: |
           ./gradlew assembleRelease lintRelease \
-            -PversionName="$VERSION" -PversionCode="$BUILD_NUMBER"
+            -PversionName="$VERSION" -PversionCode="$CODE"
 
       # The signing key is committed, so the APK installs over earlier releases
       # and no secrets are needed here.
