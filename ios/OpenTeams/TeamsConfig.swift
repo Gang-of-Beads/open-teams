@@ -8,13 +8,14 @@ enum TeamsConfig {
 
     /// Teams web blocks every phone and tablet browser user agent (iPhone,
     /// iPad and Android alike) with an "open in the app" page, so the wrapper
-    /// identifies as desktop Safari on macOS. Safari is used rather than a
-    /// Chromium or Firefox user agent because WKWebView is the Safari engine,
-    /// so Teams' feature detection matches what the page actually runs on.
-    /// Copied verbatim from Safari 27.0.1 on macOS (Safari freezes the macOS
-    /// token at 10_15_7).
+    /// has to present a desktop browser. Desktop Safari reaches sign-in, but
+    /// tenants with a Conditional Access policy that requires Microsoft Edge
+    /// then reject it (AADSTS 530081, "You must use Microsoft Edge"), so the
+    /// wrapper identifies as Edge on Windows. Verified with a real tenant
+    /// sign-in. The page still runs on WebKit, so Chromium-only features that
+    /// Teams enables for Edge may not work.
     static let userAgent =
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0.1 Safari/605.1.15"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.3800.65"
 
     /// Hosts (and their subdomains) that belong to Teams, Microsoft 365 or
     /// Microsoft sign-in. New windows to these hosts open inside the app; new
