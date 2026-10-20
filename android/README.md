@@ -6,6 +6,12 @@ navigation and screen sharing are native Android features.
 
 ## Building
 
+Release builds are signed with the key in `keystore/open-teams.jks` (password
+`open-teams`, committed on purpose so updates install over each other). Every
+release must be signed with that same key; a key change forces an uninstall,
+which drops the Teams sign-in.
+
+
 Requires JDK 17 and the Android SDK (platform 36).
 
 ```bash

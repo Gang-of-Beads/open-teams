@@ -27,10 +27,20 @@ android {
         versionName = "0.2.0"
     }
 
+    signingConfigs {
+        // Committed on purpose: personal builds, and a release install then
+        // updates the previous one instead of needing an uninstall.
+        create("release") {
+            storeFile = file("../keystore/open-teams.jks")
+            storePassword = "open-teams"
+            keyAlias = "open-teams"
+            keyPassword = "open-teams"
+        }
+    }
+
     buildTypes {
         release {
-            // Personal builds: the debug key keeps a release install over the debug one.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
