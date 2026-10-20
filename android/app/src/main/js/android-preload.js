@@ -365,6 +365,24 @@ html.ot-native ${SHELL.listPane} .fui-TreeItemLayout .fui-Avatar,
 html.ot-native ${SHELL.listPane} .fui-TreeItemLayout .fui-Avatar img { width: 36px; height: 36px; }
 html.ot-native ${SHELL.listPane} .fui-TreeItemLayout { transition: background-color 120ms; }
 html.ot-native ${SHELL.listPane} .fui-TreeItemLayout:active { background-color: rgba(128, 128, 128, 0.18); }
+/* Conversation: Teams renders its desktop layout here, one line of text in a
+   bubble with 18px of padding and a 26px gap above the composer. Native
+   density is a 36px composer and 15px text. */
+html.ot-native [data-tid="message-pane-list-runway"] { padding: 10px 12px 6px !important; }
+html.ot-native [data-tid="chat-pane-message"] { padding: 3px 10px !important; }
+html.ot-native [data-tid="chat-pane-message"] > div { margin: 0 !important; padding: 0 !important; }
+html.ot-native [data-tid="chat-pane-message"] :is(p, div, span) { font-size: 15px; line-height: 1.35 !important; }
+html.ot-native [data-tid="message-author-name"] { font-size: 13px !important; }
+html.ot-native .quoted-reply-card,
+html.ot-native .quoted-reply-card :is(div, span) { font-size: 14px !important; line-height: 1.3 !important; }
+html.ot-native .quoted-reply-card { padding: 2px 2px 3px !important; }
+html.ot-native [data-tid="chat-pane-gutter-box"] { height: 8px !important; overflow: hidden; }
+html.ot-native [data-tid="ckeditor"] { min-height: 38px !important; padding: 8px 12px 6px !important; }
+html.ot-native [data-tid="simplified-compose-bottom-toolbar"] { height: 38px; align-items: center; }
+html.ot-native [data-tid="simplified-compose-bottom-toolbar"] button { width: 28px !important; height: 28px !important; }
+html.ot-native [data-tid="chat-pane-compose-message-footer"] > div:last-child {
+  height: 13px !important; overflow: hidden; font-size: 11px; line-height: 13px; opacity: 0.7;
+}
 `;
 
 function visible(element) {
@@ -571,67 +589,25 @@ function shellBack() {
   }
 }
 
-// Rows of whatever list or view is on screen (chats, activity, calls...).
-function visibleRows() {
-  return [...document.querySelectorAll('[data-tid^="app-layout-area--"] :is([role="treeitem"], [role="option"], [role="row"], [role="listitem"])')]
-    .filter((row) => {
-      const rect = row.getBoundingClientRect();
-      return rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight && rect.left >= 0 && rect.left < innerWidth;
-    })
-    .slice(0, 5);
-}
-
-// Apps where Teams reopened an item right after showing the list.
-const reopeningApps = new Set();
-
 function navigateApp(id) {
   const button = document.getElementById(id);
   if (!button) {
     return;
   }
-  // Teams unmounts an app's view when another opens and rebuilds it on the way
-  // back. The app shows its last look meanwhile and asks for "app-ready" once
-  // new rows (or an app's frame) are on screen.
-  const before = new Set(visibleRows());
   const start = performance.now();
   let leftAt = 0;
-  let ready = false;
   button.click();
-  expectView(false, 2000, true);
+  expectView(false, 2000, true); // the list, not the conversation the tab was last on
   const check = () => {
     const elapsed = performance.now() - start;
-    if (itemOpenedAt > start || elapsed > 4000) {
-      if (!ready) {
-        ipcRenderer.send("app-ready", id); // the user moved on, or Teams is slow: show the page as it is
-      }
-      return;
-    }
     const back = document.querySelector(SHELL.back);
     // Like the native app, a tab opens on its list rather than the last
-    // conversation, which Teams may also reopen just after showing the list
-    // (a race in its narrow layout). That happens under the snapshot.
-    if (onTop(back)) {
-      if (!leftAt && elapsed < 2000 && itemOpenedAt < start) {
-        leftAt = performance.now();
-        reopeningApps.add(id);
-        if (ready) {
-          ready = false;
-          ipcRenderer.send("app-busy", id);
-        }
-        back.click();
-      }
-    } else if (!ready) {
-      const rows = visibleRows();
-      const fresh = rows.length >= 3 && rows.every((row) => !before.has(row));
-      const frame = [...document.querySelectorAll('[data-tid="app-layout-area--main"] iframe')].some(visible) &&
-        ![...before].some((row) => row.isConnected && visible(row));
-      const settled = leftAt ? performance.now() - leftAt > 350 : !reopeningApps.has(id) || elapsed > 1200;
-      if (button.getAttribute("aria-pressed") === "true" && (fresh || frame) && settled) {
-        ready = true;
-        requestAnimationFrame(() => ipcRenderer.send("app-ready", id)); // after a paint with the content
-      }
+    // conversation, which Teams may also reopen just after showing the list.
+    if (onTop(back) && !leftAt && elapsed < 2000 && itemOpenedAt < start) {
+      leftAt = performance.now();
+      back.click();
     }
-    if (!ready || elapsed < 1500) {
+    if (leftAt ? performance.now() - leftAt < 400 : elapsed < 1500) {
       requestAnimationFrame(check);
     }
   };

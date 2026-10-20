@@ -10,9 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
-import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Icon
 import android.media.AudioManager
@@ -20,15 +18,12 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.transition.Fade
 import android.transition.TransitionManager
 import android.util.Rational
 import android.util.TypedValue
 import android.view.LayoutInflater
-import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -159,9 +154,6 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null && (!fresh || link == null)) handleIntent(intent)
 
         TeamsWeb.bridge.onShellChanged = { render() }
-        TeamsWeb.bridge.onAppReady = { id -> if (id == snapshotApp) hideSnapshot() }
-        // Teams reopened an item after showing the list; cover it again while the page goes back.
-        TeamsWeb.bridge.onAppBusy = { id -> if (id == shell?.selectedApp?.id) showSnapshot(id) }
         // Notifications for messages and calls; Bluetooth so WebRTC can route call audio to headsets.
         val startupPermissions = buildList {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
@@ -201,11 +193,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        if (TeamsWeb.host === this) {
-            TeamsWeb.bridge.onShellChanged = null
-            TeamsWeb.bridge.onAppReady = null
-            TeamsWeb.bridge.onAppBusy = null
-        }
+        if (TeamsWeb.host === this) TeamsWeb.bridge.onShellChanged = null
         TeamsWeb.detach(this)
         super.onDestroy()
     }
@@ -484,69 +472,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Teams unmounts an app when another opens and rebuilds it on the way back,
-    // which takes up to a second or two. Like the native app showing its cached
-    // list, a tab shows how it looked when last left until Teams reports
-    // "app-ready" for it.
-    private val snapshots = object : LinkedHashMap<String, Bitmap>(8, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>) = size > MAX_SNAPSHOTS
-    }
-    private var snapshotApp: String? = null
-    private val hideSnapshotLater = Runnable { hideSnapshot() }
-
+    // Teams unmounts an app when another opens and rebuilds it on the way back.
     private fun switchTab(id: String) {
-        val state = shell
-        val from = state?.selectedApp?.id
-        val go = {
-            if (from != id) showSnapshot(id)
-            pendingApp = id to SystemClock.uptimeMillis()
-            shell?.let(::renderShell)
-            TeamsWeb.bridge.emit("navigate-app", id)
-        }
-        val listShowing = state != null && !state.detail && !state.header && !state.overlay && !imeVisible &&
-            !CallController.inCall && !binding.tabSnapshot.isVisible
-        if (from == null || from == id || !listShowing) return go()
-        captureWebView { bitmap ->
-            if (bitmap != null) snapshots[from] = bitmap
-            go()
-        }
-    }
-
-    private fun captureWebView(done: (Bitmap?) -> Unit) {
-        val view = webView
-        if (view == null || view.width == 0 || view.height == 0) return done(null)
-        val at = IntArray(2).also(view::getLocationInWindow)
-        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        PixelCopy.request(
-            window,
-            Rect(at[0], at[1], at[0] + view.width, at[1] + view.height),
-            bitmap,
-            { result -> done(bitmap.takeIf { result == PixelCopy.SUCCESS }) },
-            Handler(Looper.getMainLooper()),
-        )
-    }
-
-    private fun showSnapshot(id: String) {
-        val bitmap = snapshots[id] ?: return
-        val view = webView ?: return
-        if (bitmap.width != view.width || bitmap.height != view.height) return
-        binding.tabSnapshot.animate().cancel()
-        binding.tabSnapshot.setImageBitmap(bitmap)
-        binding.tabSnapshot.alpha = 1f
-        binding.tabSnapshot.isVisible = true
-        snapshotApp = id
-        binding.tabSnapshot.removeCallbacks(hideSnapshotLater)
-        binding.tabSnapshot.postDelayed(hideSnapshotLater, 4000)
-    }
-
-    private fun hideSnapshot() {
-        snapshotApp = null
-        binding.tabSnapshot.removeCallbacks(hideSnapshotLater)
-        if (!binding.tabSnapshot.isVisible) return
-        binding.tabSnapshot.animate().alpha(0f).setDuration(150).withEndAction {
-            binding.tabSnapshot.isVisible = false
-            binding.tabSnapshot.setImageDrawable(null)
-        }
+        if (shell?.selectedApp?.id == id) return
+        pendingApp = id to SystemClock.uptimeMillis()
+        shell?.let(::renderShell)
+        TeamsWeb.bridge.emit("navigate-app", id)
     }
 
     private fun addNavItem(id: String, label: String, icon: Int, onClick: () -> Unit) {
@@ -653,7 +584,6 @@ class MainActivity : AppCompatActivity() {
         // Like the native app: bars on the lists, none in an open conversation or a call.
         val state = shell
         val bars = state != null && !state.detail && !state.header && !inCall && !pip && !fullscreen
-        if (!bars || state?.overlay == true) hideSnapshot()
         if (binding.topBar.isVisible != bars || binding.bottomNav.isVisible != (bars && !imeVisible)) {
             TransitionManager.beginDelayedTransition(
                 binding.root,
@@ -718,7 +648,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val MAX_TABS = 5
-        private const val MAX_SNAPSHOTS = 4 // full-screen bitmaps, about 8MB each
         private const val MORE = "more"
         const val ACTION_ANSWER_AUDIO = "io.github.gangofbeads.openteams.ANSWER_AUDIO"
         const val ACTION_ANSWER_VIDEO = "io.github.gangofbeads.openteams.ANSWER_VIDEO"
