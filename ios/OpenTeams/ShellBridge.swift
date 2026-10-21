@@ -14,6 +14,8 @@ enum TeamsTab: String, CaseIterable {
 struct ShellState: Equatable {
     /// Teams' app bar exists: the app has loaded and the user is signed in.
     var ready = false
+    /// Visible destination, which can differ from the selected Teams app
+    /// when Activity opens a conversation or a call in place.
     var activeTab: TeamsTab = .chat
     var badges: [TeamsTab: Int] = [:]
     /// A chat or channel is open over the list (narrow layout), so going back
@@ -25,6 +27,7 @@ struct ShellState: Equatable {
 
 protocol ShellBridgeDelegate: AnyObject {
     func shellBridge(_ bridge: ShellBridge, didUpdate state: ShellState)
+    func shellBridge(_ bridge: ShellBridge, navigationSettled token: Int)
 }
 
 /// Connects the native shell (tab bar, swipe back, status bar color, loading
@@ -66,15 +69,17 @@ final class ShellBridge: NSObject {
         contentController.add(WeakScriptMessageHandler(self), name: Self.handlerName)
     }
 
-    func select(_ tab: TeamsTab) {
+    func select(_ tab: TeamsTab, transitionToken: Int = 0) {
         if tab == .more {
             run("openMore()")
         } else if let id = Self.appIDs[tab] {
-            run("select(\"\(id)\")")
+            run("select(\"\(id)\", \(transitionToken))")
         }
     }
 
     func goBack() { run("goBack()") }
+
+    func focusNextUnread() { run("focusNextUnread()") }
 
     /// Hides Teams' own app bar button while the native tab bar is shown.
     func setNativeTabsShown(_ shown: Bool) { run("setNativeTabs(\(shown))") }
@@ -110,9 +115,13 @@ extension ShellBridge: WKScriptMessageHandler {
         let origin = message.frameInfo.securityOrigin
         guard message.frameInfo.isMainFrame,
               TeamsConfig.isTrusted(URL(string: "\(origin.protocol)://\(origin.host)")),
-              let payload = message.body as? [String: Any],
-              payload["type"] as? String == "state"
+              let payload = message.body as? [String: Any]
         else { return }
+        if payload["type"] as? String == "navigationSettled", let token = payload["token"] as? Int {
+            delegate?.shellBridge(self, navigationSettled: token)
+            return
+        }
+        guard payload["type"] as? String == "state" else { return }
 
         var next = ShellState()
         next.ready = payload["ready"] as? Bool ?? false

@@ -26,6 +26,9 @@ final class TeamsViewController: UIViewController {
     private var cookiePathFixer: CookiePathFixer?
 
     private let tabBar = UITabBar()
+    private let tabTransition = PageTransition()
+    private var lastChatTap: TimeInterval?
+    private var lastChatTapWasSelected = false
     private let loadingView = LoadingView()
     private var webViewAboveTabBar: NSLayoutConstraint!
     private var progressObservation: NSKeyValueObservation?
@@ -177,7 +180,10 @@ final class TeamsViewController: UIViewController {
         loadingView.isHidden = false
         loadingTimers = [
             Timer.scheduledTimer(withTimeInterval: 40, repeats: false) { [weak self] _ in
-                guard let self, !self.shellBridge.state.ready, self.loadAttempts == 0 else { return }
+                guard let self, !self.shellBridge.state.ready, self.loadAttempts == 0,
+                      !self.keepAlive.callInProgress,
+                      ["teams.cloud.microsoft", "teams.microsoft.com"].contains(self.webView.url?.host ?? "")
+                else { return }
                 self.loadAttempts += 1
                 self.webView.reload()
             },
@@ -342,6 +348,8 @@ extension TeamsViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard webView === self.webView else { return }
+        tabTransition.cancel()
+        lastChatTap = nil
         sessionMaintenance.navigationStarted()
         keepAlive.callInProgress = false
         UIApplication.shared.isIdleTimerDisabled = false
@@ -364,10 +372,11 @@ extension TeamsViewController: WKNavigationDelegate {
         shellBridge.reset()
         setTabBarShown(false)
         backGesture.isEnabled = false
-        if TeamsConfig.isTrusted(webView.url), webView.url?.host?.contains("teams") == true {
-            if loadingView.isHidden { showLoading() }
-        } else {
-            // Sign-in and other pages are shown as they are.
+        // Do not turn ordinary in-session document navigation into another
+        // cold start (and a new 40-second reload timer). loadTeams() alone
+        // shows the native loading screen for explicit loads and recovery.
+        if !["teams.cloud.microsoft", "teams.microsoft.com"].contains(webView.url?.host ?? "") {
+            // Never cover interactive sign-in pages or reload them on a timer.
             hideLoading()
         }
     }
@@ -385,11 +394,7 @@ extension TeamsViewController: WKNavigationDelegate {
                 return
             }
             lastAutomaticReload = Date()
-            if webView.url == nil {
-                webView.load(URLRequest(url: TeamsConfig.startURL))
-            } else {
-                webView.reload()
-            }
+            loadTeams()
         } else {
             closePopup(webView)
         }
@@ -538,6 +543,10 @@ extension TeamsViewController: WKDownloadDelegate {
 // MARK: - ShellBridgeDelegate
 
 extension TeamsViewController: ShellBridgeDelegate {
+    func shellBridge(_ bridge: ShellBridge, navigationSettled token: Int) {
+        tabTransition.finish(token: token)
+    }
+
     func shellBridge(_ bridge: ShellBridge, didUpdate state: ShellState) {
         if let themeColor = state.themeColor {
             apply(themeColor: themeColor)
@@ -562,15 +571,40 @@ extension TeamsViewController: ShellBridgeDelegate {
 
 extension TeamsViewController: UITabBarDelegate {
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+        guard Self.tabItems.indices.contains(item.tag) else { return }
         let tab = Self.tabItems[item.tag].0
-        shellBridge.select(tab)
+        let alreadySelected = shellBridge.state.activeTab == tab
+        let now = ProcessInfo.processInfo.systemUptime
+        if tab == .chat {
+            let doubleTap = alreadySelected && lastChatTapWasSelected &&
+                lastChatTap.map { now - $0 <= 0.35 } == true
+            lastChatTap = doubleTap ? nil : now
+            lastChatTapWasSelected = alreadySelected
+            if doubleTap {
+                tabTransition.cancel()
+                shellBridge.focusNextUnread()
+                UISelectionFeedbackGenerator().selectionChanged()
+                return
+            }
+        } else {
+            lastChatTap = nil
+            lastChatTapWasSelected = false
+        }
         if tab == .more {
+            tabTransition.cancel()
+            shellBridge.select(tab)
+
             // "More" opens Teams' app list over the page; the selection stays
             // on the current app until Teams switches.
             let current = Self.tabItems.firstIndex { $0.0 == shellBridge.state.activeTab }
             if let current, let items = tabBar.items, current < items.count {
                 tabBar.selectedItem = items[current]
             }
+        } else if !alreadySelected {
+            // activeTab follows the visible destination, not just Teams'
+            // selected app tile (Activity can open Chat/Calls in place).
+            let token = tabTransition.begin(over: webView)
+            shellBridge.select(tab, transitionToken: token)
         }
     }
 }

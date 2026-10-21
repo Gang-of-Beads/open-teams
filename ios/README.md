@@ -96,6 +96,31 @@ this to one year.
   Swipe from the left edge to go back from a chat. The page does not
   rubber-band, controls have no web tap highlight or long-press menu, and the
   previous/next/done bar above the keyboard is gone.
+- **Chat tab double-tap**: while Chat is selected, double-tap within 350 ms
+  to return from a conversation to the list and locate the next loaded unread
+  chat. It scrolls and briefly outlines the row without clicking or marking it
+  read; repeated double-taps cycle through loaded unread rows. If none has a
+  recognized unread marker, the list scrolls to the top. Virtualized/off-screen
+  chats that Teams has not rendered are not searched. This uses explicit unread
+  attributes/indicator elements, not message text or font weight, and needs
+  verification against the current Teams UI.
+- **Native tab transitions**: the old web page is covered by a temporary
+  in-memory snapshot while Teams switches. After the target tab is selected,
+  visible busy regions clear, DOM updates settle and transform animations end,
+  the snapshot fades out. A 1.5-second fallback always reveals the page; it is
+  not proof that the destination finished loading. The native tab bar stays
+  responsive, rapid switches invalidate old completion callbacks, and Reduce
+  Motion disables the native fade. No global Teams animations are disabled.
+- The selected native tab follows the visible destination: a conversation
+  opened from Activity selects Chat, and a visible call screen selects Calls,
+  even if Teams' own app tile still says Activity. This changes the native
+  selection only, without re-navigating or closing the opened conversation.
+  Selecting Activity afterwards returns to the feed. Destination detection
+  relies on Teams' chat-header/editor and calling UI markers and needs device
+  verification after Teams updates.
+- The native startup screen is only shown for explicit loads/retries and web
+  process recovery, not ordinary in-session document navigation. Its initial
+  stall retry does not run during a call or on sign-in pages.
 - Downloaded files open in Quick Look (with its share button); anything it
   cannot preview goes to the share sheet.
 - Notifications show the sender's picture as a thumbnail when Teams provides
@@ -282,6 +307,7 @@ The existing `npm run lint` now also checks the standalone script files.
 | `OpenTeams/NotificationBridge.swift` | `window.Notification` shim, iOS notifications, app icon badge |
 | `OpenTeams/ShellBridge.swift` | Page script: Teams' app bar state (tabs, badges, back, theme) and actions for the native shell |
 | `OpenTeams/LoadingView.swift` | Native loading and error screen |
+| `OpenTeams/PageTransition.swift` | Bounded in-memory snapshot/fade for native tab switches |
 | `OpenTeams/WKWebView+InputAccessory.swift` | Removes the bar WebKit shows above the keyboard |
 | `OpenTeams/CallBridge.swift` | Page script: Teams call events and actions (answer, decline, hang up, mute, ringtone) |
 | `OpenTeams/CallManager.swift` | CallKit provider: incoming and ongoing calls, mapped to Teams |
