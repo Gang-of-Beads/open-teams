@@ -23,13 +23,10 @@ import UIKit
 ///   which has its own audio session. The app's own session is never switched
 ///   to playAndRecord: doing so takes the microphone away from WebKit, and the
 ///   other side hears nothing. It stays in the keep-alive's mixable playback.
-/// - While a CallKit call is active, WebKit's session cannot activate from an
-///   inactive state ("insufficient priority"), so the microphone cannot start.
-///   It is fine when WebKit's audio is already active, as when answering with
-///   the app in the foreground. When answering on the lock screen or in the
-///   background, the CallKit call is kept until the user brings the app
-///   forward, then ended, and only after CallKit has released its audio is the
-///   call accepted in Teams. Once Teams connects, a new CallKit call shows it.
+/// - Earlier lock-screen attempts hit WebKit audio activation errors
+///   ("insufficient priority"). This candidate waits for didActivate before
+///   accepting in Teams, retains the full CallKit call, and does not require
+///   bringing the app forward. Locked-device two-way audio is NOT yet verified.
 ///
 /// Holding is not supported: Teams web has no hold control to map it to.
 final class CallManager: NSObject {
@@ -52,13 +49,9 @@ final class CallManager: NSObject {
     private var call: Call?
     /// Teams' mute state as last reported by the page.
     private var teamsMuted: Bool?
-    /// Answered in CallKit while the app was not in the foreground; Teams'
-    /// accept waits until the app is active (see `answer`).
-    private var acceptWhenActive = false
-    /// The CallKit call was ended to hand over to Teams; accept once CallKit
-    /// has released its audio.
-    private var acceptAfterCallKitAudio = false
-    private var activeObserver: NSObjectProtocol?
+    /// Experimental: accept after CallKit activates audio, even while locked.
+    private var answerPending = false
+    private var audioActivated = false
 
     init(bridge: CallBridge, keepAlive: BackgroundKeepAlive, notifications: NotificationBridge) {
         let configuration = CXProviderConfiguration()
@@ -75,15 +68,9 @@ final class CallManager: NSObject {
         super.init()
         provider.setDelegate(self, queue: nil)
         bridge.delegate = self
-        activeObserver = NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
-        ) { [weak self] _ in self?.handOverIfPending() }
     }
 
     deinit {
-        if let activeObserver {
-            NotificationCenter.default.removeObserver(activeObserver)
-        }
         provider.invalidate()
     }
 
@@ -110,47 +97,34 @@ final class CallManager: NSObject {
 
     // MARK: Answering
 
-    /// Accept in Teams right away when the app is active: WebKit's audio is
-    /// running and the page is visible, so the microphone starts. Otherwise
-    /// wait for the user to bring the app forward.
-    private func answer() {
-        if UIApplication.shared.applicationState == .active {
-            bridge.answer()
-        } else {
-            acceptWhenActive = true
-            Self.log("answered while in the background; accepting when the app is active")
-        }
-    }
-
-    /// The app became active with an answer pending: end the CallKit call so
-    /// WebKit can activate its audio, then accept once CallKit's audio is
-    /// released. `connected` shows the Teams call in CallKit again.
-    private func handOverIfPending() {
-        guard acceptWhenActive, let call, call.phase == .answering else { return }
-        acceptWhenActive = false
-        acceptAfterCallKitAudio = true
-        Self.log("app active; handing the call over to Teams")
-        provider.reportCall(with: call.uuid, endedAt: nil, reason: .answeredElsewhere)
-        self.call = nil
-        // CallKit normally reports didDeactivate right away; do not wait for
-        // it forever.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.acceptAfterHandOver()
-        }
-    }
-
-    private func acceptAfterHandOver() {
-        guard acceptAfterCallKitAudio else { return }
-        acceptAfterCallKitAudio = false
-        // Let the page settle into the foreground before Teams asks for the
-        // microphone.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            Self.log("accepting in Teams")
-            self?.bridge.answer()
+    private func acceptWhenAudioReady() {
+        guard answerPending, audioActivated, let current = call,
+              current.phase == .answering else { return }
+        answerPending = false
+        bridge.answer()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard let self, let call = self.call, call.uuid == current.uuid,
+                  call.phase == .answering else { return }
+            Self.log("Teams did not connect after answering")
+            self.bridge.decline()
+            self.provider.reportCall(with: call.uuid, endedAt: nil, reason: .failed)
+            self.call = nil
+            self.callFinished()
         }
     }
 
     // MARK: Teams -> CallKit
+
+    /// Fallback when Teams' internal React lifecycle events are missing.
+    /// MediaBridge reports real audio peer connections, including popup-free
+    /// calls ending without render_disconected.
+    func webRTCActivityChanged(_ active: Bool) {
+        if active {
+            connected()
+        } else if call?.phase == .active {
+            disconnected()
+        }
+    }
 
     private func reportIncoming(name: String, number: String) {
         if let call {
@@ -183,25 +157,22 @@ final class CallManager: NSObject {
     }
 
     private func incomingEnded() {
-        guard let call else {
-            // The caller gave up while we were handing over to Teams.
-            acceptAfterCallKitAudio = false
-            return
-        }
-        // While answering, the toast disappears because we clicked accept,
-        // unless the accept is still waiting for the app to become active.
-        if call.phase == .answering && !acceptWhenActive { return }
+        guard let call else { return }
+        // Accepting also dismisses the toast; wait for connection confirmation.
+        if call.phase == .answering && !answerPending { return }
         guard call.phase != .active else { return }
         Self.log("incoming call ended before it was accepted in Teams")
         provider.reportCall(with: call.uuid, endedAt: nil, reason: .remoteEnded)
         self.call = nil
-        acceptWhenActive = false
+        answerPending = false
     }
 
     private func connected() {
+        keepAlive.callInProgress = true
         if var call {
             call.phase = .active
             self.call = call
+            answerPending = false
             Self.log("call connected")
             return
         }
@@ -215,22 +186,26 @@ final class CallManager: NSObject {
                 Self.log("call not shown in CallKit: \(error.localizedDescription)")
                 guard let self, self.call?.uuid == uuid else { return }
                 self.call = nil
+                // Teams may still be in a real WebRTC call. MediaBridge owns
+                // clearing the capture guard when those connections close.
             }
         }
     }
 
     private func disconnected() {
-        guard let call, call.phase != .ringing else { return }
+        guard let call else {
+            callFinished()
+            return
+        }
+        guard call.phase != .ringing else { return }
         Self.log("call ended in Teams")
         provider.reportCall(with: call.uuid, endedAt: nil, reason: .remoteEnded)
         self.call = nil
         callFinished()
     }
 
-    /// Teams owns the mute state and it is not mirrored into CallKit.
-    /// CallKit's mute is a system-level input mute on the app, which WebKit's
-    /// capture undoes about a second later (verified on a device); CallKit
-    /// then reports "unmuted" and the microphone came back on.
+    /// Remember Teams' state without initiating a second system mute
+    /// transaction. Local capture track mute events are isolated in MediaBridge.
     private func mutedInTeams(_ isMuted: Bool) {
         teamsMuted = isMuted
         Self.log("Teams \(isMuted ? "muted" : "unmuted")")
@@ -238,7 +213,9 @@ final class CallManager: NSObject {
 
     private func callFinished() {
         teamsMuted = nil
-        acceptWhenActive = false
+        answerPending = false
+        audioActivated = false
+        keepAlive.callInProgress = false
         // CallKit may have interrupted the keep-alive.
         keepAlive.activateAudioSession()
         keepAlive.resume()
@@ -268,6 +245,10 @@ extension CallManager: CallBridgeDelegate {
 
 extension CallManager: CXProviderDelegate {
     func providerDidReset(_ provider: CXProvider) {
+        if let call {
+            if call.phase == .ringing || answerPending { bridge.decline() }
+            else { bridge.hangUp() }
+        }
         call = nil
         callFinished()
     }
@@ -281,14 +262,25 @@ extension CallManager: CXProviderDelegate {
         self.call = call
         Self.log("answering")
         bridge.setRingtoneSuppressed(false)
-        answer()
+        keepAlive.callInProgress = true
+        answerPending = true
         action.fulfill()
+        acceptWhenAudioReady()
+        let uuid = call.uuid
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self, self.call?.uuid == uuid, self.answerPending else { return }
+            Self.log("CallKit audio did not activate for the answer")
+            self.bridge.decline()
+            self.provider.reportCall(with: uuid, endedAt: nil, reason: .failed)
+            self.call = nil
+            self.callFinished()
+        }
     }
 
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
         if let call, call.uuid == action.callUUID {
             // Still ringing in Teams if the accept was waiting for the app.
-            let ringingInTeams = call.phase == .ringing || acceptWhenActive
+            let ringingInTeams = call.phase == .ringing || answerPending
             Self.log(ringingInTeams ? "declining" : "hanging up")
             if ringingInTeams {
                 bridge.decline()
@@ -311,29 +303,28 @@ extension CallManager: CXProviderDelegate {
         Self.log("Teams call shown in CallKit")
     }
 
-    /// The mute button in the iOS call UI (or on headphones) toggles Teams'
-    /// microphone. The action is then failed so that CallKit does not apply
-    /// its system-level input mute, which fights WebKit (see `mutedInTeams`).
-    /// CallKit's own state therefore stays "unmuted" and every press arrives
-    /// as "mute": when that matches Teams' state, it is taken as a toggle.
+    /// Apply the requested absolute state, not a toggle. MediaBridge prevents
+    /// OS capture mute/unmute events from changing Teams' own button state.
     func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
-        let target: Bool
-        if let teamsMuted, teamsMuted == action.isMuted {
-            target = !teamsMuted
-        } else {
-            target = action.isMuted
-        }
-        Self.log("iOS call UI mute button; Teams \(target ? "mute" : "unmute")")
-        bridge.setMuted(target)
-        action.fail()
+        guard call?.uuid == action.callUUID else { action.fail(); return }
+        // An absolute request, never a toggle: a repeated mute cannot unmute.
+        if teamsMuted != action.isMuted { bridge.setMuted(action.isMuted) }
+        action.fulfill()
     }
 
     func provider(_ provider: CXProvider, perform action: CXSetHeldCallAction) {
         action.fail()
     }
 
+    func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+        Self.log("audio activated; checking pending answer")
+        audioActivated = true
+        // WebKit owns capture; leave the host session's category alone.
+        acceptWhenAudioReady()
+    }
+
     func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
-        acceptAfterHandOver()
+        audioActivated = false
         if call == nil {
             callFinished()
         }
