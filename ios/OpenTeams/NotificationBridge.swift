@@ -23,6 +23,7 @@ final class NotificationBridge: NSObject {
         let body: String
         let tag: String
         let silent: Bool
+        let icon: String
     }
 
     /// Teams raises a web notification for a ringing call at the same moment
@@ -50,7 +51,7 @@ final class NotificationBridge: NSObject {
         let pending = held
         held.removeAll()
         for n in pending {
-            show(id: n.id, title: n.title, body: n.body, tag: n.tag, silent: n.silent)
+            show(id: n.id, title: n.title, body: n.body, tag: n.tag, silent: n.silent, icon: n.icon)
         }
     }
 
@@ -82,8 +83,13 @@ final class NotificationBridge: NSObject {
         }
     }
 
-    private func show(id: String, title: String, body: String, tag: String, silent: Bool) {
+    private func show(id: String, title: String, body: String, tag: String, silent: Bool, icon: String) {
         let content = UNMutableNotificationContent()
+        // The sender's picture as a thumbnail. Communication notifications
+        // (avatar on the left) need an entitlement a free account cannot get.
+        if let attachment = Self.attachment(fromDataURL: icon, id: id) {
+            content.attachments = [attachment]
+        }
         content.title = String(title.prefix(200))
         content.body = String(body.prefix(1000))
         content.sound = silent ? nil : .default
@@ -96,6 +102,26 @@ final class NotificationBridge: NSObject {
             if let error {
                 print("[NOTIFICATIONS] Failed to post notification: \(error.localizedDescription)")
             }
+        }
+    }
+
+    /// Writes a `data:image/...;base64,` URL from the page to a temporary file
+    /// for UNNotificationAttachment, which takes ownership of the file.
+    private static func attachment(fromDataURL dataURL: String, id: String) -> UNNotificationAttachment? {
+        guard dataURL.hasPrefix("data:image/"),
+              let comma = dataURL.firstIndex(of: ","),
+              dataURL[..<comma].hasSuffix(";base64"),
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...]))
+        else { return nil }
+        let mime = dataURL[dataURL.index(dataURL.startIndex, offsetBy: 11)..<comma]
+        let ext = mime.hasPrefix("png") ? "png" : mime.hasPrefix("gif") ? "gif" : "jpg"
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("notification-\(id).\(ext)")
+        do {
+            try data.write(to: file)
+            return try UNNotificationAttachment(identifier: "icon", url: file)
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+            return nil
         }
     }
 
@@ -141,14 +167,15 @@ extension NotificationBridge: WKScriptMessageHandler {
                 title: payload["title"] as? String ?? "",
                 body: payload["body"] as? String ?? "",
                 tag: payload["tag"] as? String ?? "",
-                silent: payload["silent"] as? Bool ?? false
+                silent: payload["silent"] as? Bool ?? false,
+                icon: payload["icon"] as? String ?? ""
             )
             if let holdUntil, holdUntil > Date() {
                 held.append(notification)
                 return
             }
             show(id: notification.id, title: notification.title, body: notification.body,
-                 tag: notification.tag, silent: notification.silent)
+                 tag: notification.tag, silent: notification.silent, icon: notification.icon)
         case "close":
             if let id = payload["id"] as? String {
                 close(id: id)
@@ -219,6 +246,24 @@ extension NotificationBridge {
         }
       };
 
+      const MAX_ICON_BYTES = 300000;
+      const iconDataURL = (src) => new Promise((resolve) => {
+        if (typeof src !== "string" || !src) return resolve("");
+        if (src.startsWith("data:")) return resolve(src.startsWith("data:image/") && src.length < MAX_ICON_BYTES * 1.4 ? src : "");
+        const timer = setTimeout(() => resolve(""), 1500);
+        const done = (value) => { clearTimeout(timer); resolve(value); };
+        fetch(src, { credentials: "include" })
+          .then((response) => (response.ok ? response.blob() : null))
+          .then((blob) => {
+            if (!blob || !blob.type.startsWith("image/") || blob.size > MAX_ICON_BYTES) return done("");
+            const reader = new FileReader();
+            reader.onload = () => done(String(reader.result));
+            reader.onerror = () => done("");
+            reader.readAsDataURL(blob);
+          })
+          .catch(() => done(""));
+      });
+
       // A factory used with `new`: returning an object replaces `this`.
       function OpenTeamsNotification(title, options) {
         options = options || {};
@@ -251,7 +296,13 @@ extension NotificationBridge {
         tracked.set(id, stub);
         while (tracked.size > MAX_TRACKED) tracked.delete(tracked.keys().next().value);
 
-        post({ type: "show", id, title: stub.title, body: stub.body, tag: stub.tag, silent: stub.silent });
+        // The picture is fetched here, where Teams' cookies and blob: URLs
+        // work, and handed over as a data URL. Never hold the notification up
+        // for more than a moment.
+        iconDataURL(options.icon).then((icon) => {
+          if (stub._closed) return;
+          post({ type: "show", id, title: stub.title, body: stub.body, tag: stub.tag, silent: stub.silent, icon });
+        });
         setTimeout(() => dispatch(stub, "show"), 0);
         return stub;
       }

@@ -1,19 +1,43 @@
+import QuickLook
 import UIKit
 import WebKit
 
-/// Hosts the main Teams web view and handles everything WKWebView leaves to
-/// the embedding app: popups (sign-in, links), JavaScript dialogs, camera and
-/// microphone permission, file downloads and recovery from web process crashes.
+/// Hosts the main Teams web view in a native shell and handles everything
+/// WKWebView leaves to the embedding app: popups (sign-in, links), JavaScript
+/// dialogs, camera and microphone permission, file downloads and recovery
+/// from web process crashes.
+///
+/// The shell around Teams is native: a tab bar for Teams' main apps, the
+/// status bar area in Teams' title bar color, a loading and error screen,
+/// swipe from the left edge to go back, and Quick Look for downloads.
 final class TeamsViewController: UIViewController {
     private var webView: WKWebView!
     private var popups: [WKWebView: PopupViewController] = [:]
     private var downloadDestinations: [WKDownload: URL] = [:]
+    private var previewFile: URL?
     private var lastAutomaticReload: Date?
     private let notificationBridge = NotificationBridge()
     private let keepAlive = BackgroundKeepAlive()
     private let callBridge = CallBridge()
+    private let shellBridge = ShellBridge()
     private var callManager: CallManager?
     private var cookiePathFixer: CookiePathFixer?
+
+    private let tabBar = UITabBar()
+    private let loadingView = LoadingView()
+    private var webViewAboveTabBar: NSLayoutConstraint!
+    private var progressObservation: NSKeyValueObservation?
+    private var loadingTimers: [Timer] = []
+    private var loadAttempts = 0
+    private var backGesture: UIScreenEdgePanGestureRecognizer!
+
+    private static let tabItems: [(TeamsTab, String, String)] = [
+        (.activity, String(localized: "Activity"), "bell"),
+        (.chat, String(localized: "Chat"), "bubble.left.and.bubble.right"),
+        (.calendar, String(localized: "Calendar"), "calendar"),
+        (.calls, String(localized: "Calls"), "phone"),
+        (.more, String(localized: "More"), "ellipsis"),
+    ]
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -24,22 +48,159 @@ final class TeamsViewController: UIViewController {
         notificationBridge.install(in: configuration.userContentController)
         keepAlive.install(in: configuration.userContentController)
         callBridge.install(in: configuration.userContentController)
+        shellBridge.install(in: configuration.userContentController)
         webView = makeWebView(configuration: configuration)
+        // The outer page does not scroll; Teams scrolls its own panes. Without
+        // this the whole app rubber-bands like a web page.
+        webView.scrollView.bounces = false
+        webView.removeInputAccessoryView()
         notificationBridge.webView = webView
         notificationBridge.requestAuthorization()
         keepAlive.start(webView: webView)
         callBridge.webView = webView
+        shellBridge.webView = webView
+        shellBridge.delegate = self
         callManager = CallManager(bridge: callBridge, keepAlive: keepAlive, notifications: notificationBridge)
+
+        layOut()
+        setUpTabBar()
+        setUpBackGesture()
+        setUpLoadingView()
+
+        loadTeams()
+    }
+
+    // MARK: Layout
+
+    private func layOut() {
         webView.translatesAutoresizingMaskIntoConstraints = false
+        tabBar.translatesAutoresizingMaskIntoConstraints = false
+        loadingView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
+        view.addSubview(tabBar)
+        view.addSubview(loadingView)
+
+        // The web view sits between the status bar and the tab bar, and above
+        // the keyboard while it is up (the keyboard covers the tab bar).
+        webViewAboveTabBar = webView.bottomAnchor.constraint(lessThanOrEqualTo: tabBar.topAnchor)
+        let fill = webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        fill.priority = .defaultLow
         NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
+            webView.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor),
+            fill,
 
-        webView.load(URLRequest(url: TeamsConfig.startURL))
+            tabBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tabBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tabBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            loadingView.topAnchor.constraint(equalTo: view.topAnchor),
+            loadingView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            loadingView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            loadingView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+    }
+
+    private func setUpTabBar() {
+        tabBar.delegate = self
+        tabBar.items = Self.tabItems.enumerated().map { index, item in
+            UITabBarItem(title: item.1, image: UIImage(systemName: item.2), tag: index)
+        }
+        setTabBarShown(false)
+    }
+
+    private func setTabBarShown(_ shown: Bool) {
+        tabBar.isHidden = !shown
+        webViewAboveTabBar.isActive = shown
+        shellBridge.setNativeTabsShown(shown)
+    }
+
+    private func setUpBackGesture() {
+        backGesture = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleBackGesture))
+        backGesture.edges = .left
+        backGesture.delegate = self
+        backGesture.isEnabled = false
+        webView.addGestureRecognizer(backGesture)
+    }
+
+    @objc private func handleBackGesture(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        let translation = gesture.translation(in: view).x
+        let velocity = gesture.velocity(in: view).x
+        if translation > 80 || velocity > 600 {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            shellBridge.goBack()
+        }
+    }
+
+    // MARK: Loading
+
+    private func setUpLoadingView() {
+        loadingView.onRetry = { [weak self] in self?.loadTeams() }
+        progressObservation = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] webView, _ in
+            self?.loadingView.setProgress(webView.estimatedProgress)
+        }
+    }
+
+    private func loadTeams() {
+        loadAttempts = 0
+        if webView.url == nil {
+            webView.load(URLRequest(url: TeamsConfig.startURL))
+        } else {
+            webView.reload()
+        }
+        showLoading()
+    }
+
+    /// Covers the page until Teams reports it is ready. Teams sometimes
+    /// stalls while loading; reload once if it is not ready in time, and
+    /// eventually reveal the page so Teams' own error or sign-in UI is usable.
+    private func showLoading() {
+        loadingTimers.forEach { $0.invalidate() }
+        loadingView.showLoading()
+        loadingView.isHidden = false
+        loadingTimers = [
+            Timer.scheduledTimer(withTimeInterval: 40, repeats: false) { [weak self] _ in
+                guard let self, !self.shellBridge.state.ready, self.loadAttempts == 0 else { return }
+                self.loadAttempts += 1
+                self.webView.reload()
+            },
+            Timer.scheduledTimer(withTimeInterval: 75, repeats: false) { [weak self] _ in
+                self?.hideLoading()
+            },
+        ]
+    }
+
+    private func hideLoading() {
+        loadingTimers.forEach { $0.invalidate() }
+        loadingTimers = []
+        guard !loadingView.isHidden else { return }
+        UIView.animate(withDuration: 0.25, animations: {
+            self.loadingView.alpha = 0
+        }, completion: { _ in
+            self.loadingView.isHidden = true
+            self.loadingView.alpha = 1
+        })
+    }
+
+    private func showLoadError(_ message: String) {
+        loadingTimers.forEach { $0.invalidate() }
+        loadingTimers = []
+        loadingView.showError(message)
+        loadingView.isHidden = false
+    }
+
+    // MARK: Theme
+
+    /// Matches the status bar area, tab bar and system UI to Teams' theme.
+    private func apply(themeColor: UIColor) {
+        view.backgroundColor = themeColor
+        loadingView.backgroundColor = themeColor
+        var white: CGFloat = 1
+        themeColor.getWhite(&white, alpha: nil)
+        view.window?.overrideUserInterfaceStyle = white < 0.5 ? .dark : .light
     }
 
     private static func makeConfiguration() -> WKWebViewConfiguration {
@@ -117,23 +278,6 @@ final class TeamsViewController: UIViewController {
         popup.dismiss(animated: true)
     }
 
-    private func showLoadError(_ error: Error) {
-        let alert = UIAlertController(
-            title: "Unable to load Teams",
-            message: error.localizedDescription,
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Retry", style: .default) { [weak self] _ in
-            guard let self else { return }
-            if self.webView.url == nil {
-                self.webView.load(URLRequest(url: TeamsConfig.startURL))
-            } else {
-                self.webView.reload()
-            }
-        })
-        presenter.present(alert, animated: true)
-    }
-
     private static func isIgnorableLoadError(_ error: Error) -> Bool {
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
@@ -195,7 +339,21 @@ extension TeamsViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard webView === self.webView, !Self.isIgnorableLoadError(error) else { return }
-        showLoadError(error)
+        showLoadError(error.localizedDescription)
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        guard webView === self.webView else { return }
+        // A new page: Teams reports its state again once it has loaded.
+        shellBridge.reset()
+        setTabBarShown(false)
+        backGesture.isEnabled = false
+        if TeamsConfig.isTrusted(webView.url), webView.url?.host?.contains("teams") == true {
+            if loadingView.isHidden { showLoading() }
+        } else {
+            // Sign-in and other pages are shown as they are.
+            hideLoading()
+        }
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
@@ -205,11 +363,7 @@ extension TeamsViewController: WKNavigationDelegate {
             // Reload once automatically; if the process keeps dying, ask the
             // user instead of looping.
             if let last = lastAutomaticReload, Date().timeIntervalSince(last) < 10 {
-                showLoadError(NSError(
-                    domain: "OpenTeams",
-                    code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "The web content process stopped unexpectedly."]
-                ))
+                showLoadError(String(localized: "Teams stopped unexpectedly."))
                 return
             }
             lastAutomaticReload = Date()
@@ -332,7 +486,15 @@ extension TeamsViewController: WKDownloadDelegate {
 
     func downloadDidFinish(_ download: WKDownload) {
         guard let file = downloadDestinations.removeValue(forKey: download) else { return }
-        // The share sheet lets the user save to Files, AirDrop or open in another app.
+        // Quick Look previews documents and images and has its own share
+        // button; anything it cannot show goes straight to the share sheet.
+        if QLPreviewController.canPreview(file as NSURL) {
+            previewFile = file
+            let preview = QLPreviewController()
+            preview.dataSource = self
+            presenter.present(preview, animated: true)
+            return
+        }
         let share = UIActivityViewController(activityItems: [file], applicationActivities: nil)
         if let popover = share.popoverPresentationController {
             let host = presenter.view!
@@ -352,5 +514,69 @@ extension TeamsViewController: WKDownloadDelegate {
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         presenter.present(alert, animated: true)
+    }
+}
+
+// MARK: - ShellBridgeDelegate
+
+extension TeamsViewController: ShellBridgeDelegate {
+    func shellBridge(_ bridge: ShellBridge, didUpdate state: ShellState) {
+        if let themeColor = state.themeColor {
+            apply(themeColor: themeColor)
+        }
+        backGesture.isEnabled = state.canGoBack
+        setTabBarShown(state.ready)
+        guard state.ready else { return }
+        hideLoading()
+
+        let items = tabBar.items ?? []
+        for (index, entry) in Self.tabItems.enumerated() where index < items.count {
+            let count = state.badges[entry.0] ?? 0
+            items[index].badgeValue = count > 0 ? (count > 99 ? "99+" : String(count)) : nil
+        }
+        if let index = Self.tabItems.firstIndex(where: { $0.0 == state.activeTab }), index < items.count {
+            tabBar.selectedItem = items[index]
+        }
+    }
+}
+
+// MARK: - UITabBarDelegate
+
+extension TeamsViewController: UITabBarDelegate {
+    func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+        let tab = Self.tabItems[item.tag].0
+        shellBridge.select(tab)
+        if tab == .more {
+            // "More" opens Teams' app list over the page; the selection stays
+            // on the current app until Teams switches.
+            let current = Self.tabItems.firstIndex { $0.0 == shellBridge.state.activeTab }
+            if let current, let items = tabBar.items, current < items.count {
+                tabBar.selectedItem = items[current]
+            }
+        }
+    }
+}
+
+// MARK: - UIGestureRecognizerDelegate
+
+extension TeamsViewController: UIGestureRecognizerDelegate {
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        // WebKit's own scroll and tap recognizers keep working alongside.
+        true
+    }
+}
+
+// MARK: - QLPreviewControllerDataSource
+
+extension TeamsViewController: QLPreviewControllerDataSource {
+    func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+        previewFile == nil ? 0 : 1
+    }
+
+    func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+        (previewFile ?? FileManager.default.temporaryDirectory) as NSURL
     }
 }

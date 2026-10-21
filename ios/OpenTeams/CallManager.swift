@@ -50,7 +50,8 @@ final class CallManager: NSObject {
     private let keepAlive: BackgroundKeepAlive
     private let notifications: NotificationBridge
     private var call: Call?
-    private var muted = false
+    /// Teams' mute state as last reported by the page.
+    private var teamsMuted: Bool?
     /// Answered in CallKit while the app was not in the foreground; Teams'
     /// accept waits until the app is active (see `answer`).
     private var acceptWhenActive = false
@@ -226,14 +227,17 @@ final class CallManager: NSObject {
         callFinished()
     }
 
+    /// Teams owns the mute state and it is not mirrored into CallKit.
+    /// CallKit's mute is a system-level input mute on the app, which WebKit's
+    /// capture undoes about a second later (verified on a device); CallKit
+    /// then reports "unmuted" and the microphone came back on.
     private func mutedInTeams(_ isMuted: Bool) {
-        guard let call, call.phase == .active, isMuted != muted else { return }
-        muted = isMuted
-        controller.request(CXTransaction(action: CXSetMutedCallAction(call: call.uuid, muted: isMuted))) { _ in }
+        teamsMuted = isMuted
+        Self.log("Teams \(isMuted ? "muted" : "unmuted")")
     }
 
     private func callFinished() {
-        muted = false
+        teamsMuted = nil
         acceptWhenActive = false
         // CallKit may have interrupted the keep-alive.
         keepAlive.activateAudioSession()
@@ -307,10 +311,21 @@ extension CallManager: CXProviderDelegate {
         Self.log("Teams call shown in CallKit")
     }
 
+    /// The mute button in the iOS call UI (or on headphones) toggles Teams'
+    /// microphone. The action is then failed so that CallKit does not apply
+    /// its system-level input mute, which fights WebKit (see `mutedInTeams`).
+    /// CallKit's own state therefore stays "unmuted" and every press arrives
+    /// as "mute": when that matches Teams' state, it is taken as a toggle.
     func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
-        muted = action.isMuted
-        bridge.setMuted(action.isMuted)
-        action.fulfill()
+        let target: Bool
+        if let teamsMuted, teamsMuted == action.isMuted {
+            target = !teamsMuted
+        } else {
+            target = action.isMuted
+        }
+        Self.log("iOS call UI mute button; Teams \(target ? "mute" : "unmute")")
+        bridge.setMuted(target)
+        action.fail()
     }
 
     func provider(_ provider: CXProvider, perform action: CXSetHeldCallAction) {
