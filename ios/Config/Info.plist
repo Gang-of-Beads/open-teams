@@ -4,14 +4,19 @@
   Keys that build settings cannot generate. Xcode merges this file with the
   generated Info.plist (GENERATE_INFOPLIST_FILE = YES).
 
-  UIBackgroundModes/audio lets the silent keep-alive clip, and with it the
-  Teams page, keep running in the background (see BackgroundKeepAlive.swift).
+  UIBackgroundModes:
+  - audio lets the inaudible keep-alive tone, and with it the Teams page, keep
+    running in the background (see BackgroundKeepAlive.swift).
+  - voip is required for CXProvider.reportNewIncomingCall from the
+    background: without it iOS rejects the report (com.apple.CallKit.error 0)
+    and no call UI appears (see CallManager.swift). No PushKit is used.
 -->
 <plist version="1.0">
 <dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>voip</string>
 	</array>
 </dict>
 </plist>
