@@ -17,6 +17,43 @@ final class NotificationBridge: NSObject {
     weak var webView: WKWebView?
     private let center = UNUserNotificationCenter.current()
 
+    private struct PendingNotification {
+        let id: String
+        let title: String
+        let body: String
+        let tag: String
+        let silent: Bool
+    }
+
+    /// Teams raises a web notification for a ringing call at the same moment
+    /// as the call itself. While CallKit shows the call, that banner is a
+    /// duplicate, so notifications arriving shortly after a call starts
+    /// ringing are held back, dropped if CallKit takes the call and shown if
+    /// it does not.
+    private var holdUntil: Date?
+    private var held: [PendingNotification] = []
+
+    func holdNotificationsForRingingCall() {
+        holdUntil = Date().addingTimeInterval(3)
+        held.removeAll()
+    }
+
+    /// CallKit is showing the call: drop what was held.
+    func dropHeldNotifications() {
+        holdUntil = nil
+        held.removeAll()
+    }
+
+    /// CallKit did not take the call: show what was held after all.
+    func releaseHeldNotifications() {
+        holdUntil = nil
+        let pending = held
+        held.removeAll()
+        for n in pending {
+            show(id: n.id, title: n.title, body: n.body, tag: n.tag, silent: n.silent)
+        }
+    }
+
     override init() {
         super.init()
         center.delegate = self
@@ -99,13 +136,19 @@ extension NotificationBridge: WKScriptMessageHandler {
         switch type {
         case "show":
             guard let id = payload["id"] as? String else { return }
-            show(
+            let notification = PendingNotification(
                 id: id,
                 title: payload["title"] as? String ?? "",
                 body: payload["body"] as? String ?? "",
                 tag: payload["tag"] as? String ?? "",
                 silent: payload["silent"] as? Bool ?? false
             )
+            if let holdUntil, holdUntil > Date() {
+                held.append(notification)
+                return
+            }
+            show(id: notification.id, title: notification.title, body: notification.body,
+                 tag: notification.tag, silent: notification.silent)
         case "close":
             if let id = payload["id"] as? String {
                 close(id: id)

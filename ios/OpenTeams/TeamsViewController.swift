@@ -29,7 +29,7 @@ final class TeamsViewController: UIViewController {
         notificationBridge.requestAuthorization()
         keepAlive.start(webView: webView)
         callBridge.webView = webView
-        callManager = CallManager(bridge: callBridge, keepAlive: keepAlive)
+        callManager = CallManager(bridge: callBridge, keepAlive: keepAlive, notifications: notificationBridge)
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
         NSLayoutConstraint.activate([

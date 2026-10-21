@@ -35,10 +35,11 @@ final class CallManager: NSObject {
     private let controller = CXCallController()
     private let bridge: CallBridge
     private let keepAlive: BackgroundKeepAlive
+    private let notifications: NotificationBridge
     private var call: Call?
     private var muted = false
 
-    init(bridge: CallBridge, keepAlive: BackgroundKeepAlive) {
+    init(bridge: CallBridge, keepAlive: BackgroundKeepAlive, notifications: NotificationBridge) {
         let configuration = CXProviderConfiguration()
         configuration.supportsVideo = false
         configuration.maximumCallGroups = 1
@@ -49,6 +50,7 @@ final class CallManager: NSObject {
         provider = CXProvider(configuration: configuration)
         self.bridge = bridge
         self.keepAlive = keepAlive
+        self.notifications = notifications
         super.init()
         provider.setDelegate(self, queue: nil)
         bridge.delegate = self
@@ -93,13 +95,19 @@ final class CallManager: NSObject {
         let uuid = UUID()
         call = Call(uuid: uuid, phase: .ringing)
         Self.log("incoming call ringing")
+        notifications.holdNotificationsForRingingCall()
         provider.reportNewIncomingCall(with: uuid, update: Self.update(name: name, number: number)) { [weak self] error in
-            guard let error else { return }
             DispatchQueue.main.async {
+                guard let self else { return }
+                guard let error else {
+                    self.notifications.dropHeldNotifications()
+                    return
+                }
                 Self.log("incoming call not reported: \(error.localizedDescription)")
-                guard let self, self.call?.uuid == uuid else { return }
+                // Let Teams ring and notify on its own instead.
+                self.notifications.releaseHeldNotifications()
+                guard self.call?.uuid == uuid else { return }
                 self.call = nil
-                // Let Teams ring on its own instead.
                 self.bridge.setRingtoneSuppressed(false)
             }
         }

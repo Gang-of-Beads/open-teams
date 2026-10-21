@@ -162,8 +162,11 @@ events, and drives `#hangup-button`, `#microphone-button` and the
 incoming-call toast's buttons. Like everything that relies on Teams
 internals, this can break when Microsoft changes Teams web.
 
-Calls depend on the app running in the background (see above); nothing
-rings after the app is force-quit. CallKit does not work in the iOS
+Reporting incoming calls from the background requires the `voip` background
+mode (declared in `Config/Info.plist`; no PushKit is used), otherwise iOS
+rejects them. The web notification Teams raises for a ringing call is dropped
+while the iOS call UI shows it. Calls depend on the app running in the
+background (see above); nothing rings after the app is force-quit. CallKit does not work in the iOS
 Simulator; use a device.
 
 ## Known limitations
