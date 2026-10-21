@@ -162,8 +162,11 @@ Teams calls are mirrored into CallKit, so they behave like phone calls:
 - **Calls and meetings you start or join in Teams** show as an ongoing call:
   status bar / Dynamic Island indicator, Recents, and a cellular call
   interrupts it properly.
-- **End and Mute** in the iOS call UI hang up and mute in Teams, and muting in
-  Teams shows in the iOS UI. Hold is not supported (Teams web has no hold).
+- **End and Mute** in the iOS call UI hang up and toggle mute in Teams. Hold
+  is not supported (Teams web has no hold). The mute state lives in Teams:
+  CallKit's own mute is a system-level microphone mute that WebKit undoes,
+  which turned the microphone back on, so it is never applied and the iOS
+  mute button does not stay highlighted.
 
 How it works: the app subscribes to Teams' internal command stream
 (`commandChangeReportingService`, the same source the desktop app uses in
