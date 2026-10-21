@@ -162,11 +162,18 @@ Teams calls are mirrored into CallKit, so they behave like phone calls:
 - **Calls and meetings you start or join in Teams** show as an ongoing call:
   status bar / Dynamic Island indicator, Recents, and a cellular call
   interrupts it properly.
-- **End and Mute** in the iOS call UI hang up and toggle mute in Teams. Hold
-  is not supported (Teams web has no hold). The mute state lives in Teams:
-  CallKit's own mute is a system-level microphone mute that WebKit undoes,
-  which turned the microphone back on, so it is never applied and the iOS
-  mute button does not stay highlighted.
+- **End and Mute** in the iOS call UI hang up and request the corresponding
+  absolute mute state in Teams, never a toggle. Repeated mute requests must
+  not unmute the microphone. Hold is not supported (Teams web has no hold).
+- **Screen stays awake during a connected WebRTC call.** The app tracks real
+  peer connections independently of Teams' React events, with a 15-second
+  reconnection grace period. Closing the connections, reloading, or a web
+  process crash restores automatic screen locking.
+- **Local system-mute events are isolated from Teams**, adapted from the
+  desktop `ignoreSystemMute.js`. This only changes the events Teams sees on
+  local capture tracks, not `track.enabled`, remote tracks or actual system
+  audio permissions. It can also hide genuine capture interruptions from
+  Teams' UI; device testing is required.
 
 How it works: the app subscribes to Teams' internal command stream
 (`commandChangeReportingService`, the same source the desktop app uses in
@@ -177,11 +184,13 @@ internals, this can break when Microsoft changes Teams web.
 
 Audio: Teams' audio, including the microphone, runs in WebKit's GPU process
 with its own audio session, so the app never switches its own session to a
-call mode (that took the microphone away from WebKit). While a CallKit call is
-active, WebKit cannot start its audio from scratch, so a call answered on the
-lock screen is handed over: the iOS call stays up until you open the app, then
-it ends, Teams accepts, and the connected Teams call shows in CallKit again
-(Recents lists it twice).
+call mode (that took the microphone away from WebKit in earlier testing).
+The current candidate waits for CallKit's `didActivate` callback before
+asking Teams to accept, even while locked, and keeps the full CallKit call.
+It does not wait for the user to open the app or end/recreate the CallKit
+call. **Locked-device two-way audio has not yet been verified**; previous
+attempts encountered WebKit audio activation errors. An unanswered activation
+or connection times out instead of leaving a phantom call.
 
 Reporting incoming calls from the background requires the `voip` background
 mode (declared in `Config/Info.plist`; no PushKit is used), otherwise iOS
@@ -190,17 +199,31 @@ while the iOS call UI shows it. Calls depend on the app running in the
 background (see above); nothing rings after the app is force-quit. CallKit does not work in the iOS
 Simulator; use a device.
 
+## Network and session recovery
+
+Following the desktop connection manager's approach, a healthy page is never
+reloaded just because Wi-Fi changes or the phone wakes. Only a failed
+main-frame network load is retried when connectivity returns or the app
+becomes active. Certificate failures are not treated as transient network
+errors.
+
+At most once per hour while online and in the foreground, session maintenance
+asks Teams' own auth provider to silently acquire its existing Graph resource
+token using its cache/expiry logic. It does not install Electron's token-cache
+adapter, force renewal, introduce another OAuth client, export tokens to Swift,
+or store credentials. This is a best-effort use of an internal Teams API,
+not a verified fix for recurring sign-in prompts: MFA, revoked sessions and
+tenant sign-in frequency still require interactive authentication. Long-running
+session behaviour needs device verification.
+
 ## Known limitations
 
 - **Notifications need the app running.** They come from the Teams page
   itself, not a push service, so nothing arrives after the app is force-quit
   or killed by iOS (see above).
-- **Answering from the lock screen or in the background connects once you
-  open the app.** WebKit only starts the microphone for a visible page, and
-  not while a CallKit call holds the audio, so the app accepts in Teams after
-  you tap the app button in the iOS call UI. The caller hears ringing until
-  then; if they hang up first, the iOS call ends too. iOS also stops the
-  camera for backgrounded apps.
+- **Lock-screen answering is experimental.** The activation-sequenced answer
+  path needs device testing for both directions of audio. iOS also stops
+  camera capture for backgrounded apps.
 - **Muting in a call may turn itself off again (known issue).** CallKit and
   WebKit both act on the microphone's mute state; this is being worked on.
 - **No screen sharing.** `getDisplayMedia` is not available in `WKWebView` on
@@ -223,6 +246,8 @@ Simulator; use a device.
 | `OpenTeams/WKWebView+InputAccessory.swift` | Removes the bar WebKit shows above the keyboard |
 | `OpenTeams/CallBridge.swift` | Page script: Teams call events and actions (answer, decline, hang up, mute, ringtone) |
 | `OpenTeams/CallManager.swift` | CallKit provider: incoming and ongoing calls, mapped to Teams |
+| `OpenTeams/MediaBridge.swift` | Local capture mute-event isolation and WebRTC call activity |
+| `OpenTeams/SessionMaintenance.swift` | Network-failure recovery and Teams-owned silent session maintenance |
 | `OpenTeams/WeakScriptMessageHandler.swift` | Breaks the retain cycle between WebKit and the script message handlers |
 | `OpenTeams/CookiePathFixer.swift` | Copies Teams cookies with a relative path to `/` so profile pictures load |
 | `OpenTeams/BackgroundKeepAlive.swift` | Inaudible MediaStream tone that keeps the page running in the background without a Now Playing entry |
