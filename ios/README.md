@@ -162,6 +162,14 @@ events, and drives `#hangup-button`, `#microphone-button` and the
 incoming-call toast's buttons. Like everything that relies on Teams
 internals, this can break when Microsoft changes Teams web.
 
+Audio: Teams' audio, including the microphone, runs in WebKit's GPU process
+with its own audio session, so the app never switches its own session to a
+call mode (that took the microphone away from WebKit). While a CallKit call is
+active, WebKit cannot start its audio from scratch, so a call answered on the
+lock screen is handed over: the iOS call stays up until you open the app, then
+it ends, Teams accepts, and the connected Teams call shows in CallKit again
+(Recents lists it twice).
+
 Reporting incoming calls from the background requires the `voip` background
 mode (declared in `Config/Info.plist`; no PushKit is used), otherwise iOS
 rejects them. The web notification Teams raises for a ringing call is dropped
@@ -175,10 +183,10 @@ Simulator; use a device.
   itself, not a push service, so nothing arrives after the app is force-quit
   or killed by iOS (see above).
 - **Answering from the lock screen or in the background connects once you
-  open the app.** WebKit does not start the microphone for a page that is not
-  visible, so the app waits to accept in Teams until Open Teams is in the
-  foreground: tap the app button in the iOS call UI. The caller hears ringing
-  until then; if they hang up first, the iOS call ends too. iOS also stops the
+  open the app.** WebKit only starts the microphone for a visible page, and
+  not while a CallKit call holds the audio, so the app accepts in Teams after
+  you tap the app button in the iOS call UI. The caller hears ringing until
+  then; if they hang up first, the iOS call ends too. iOS also stops the
   camera for backgrounded apps.
 - **The Calendar does not load** in the embedded browser ("try the desktop
   version"). Join meetings from the chat or the meeting link instead.

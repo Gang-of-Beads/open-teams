@@ -36,10 +36,6 @@ final class BackgroundKeepAlive {
     private weak var webView: WKWebView?
     private var observers: [NSObjectProtocol] = []
 
-    /// Set by CallManager while a call owns the audio session, so the
-    /// keep-alive does not switch it back to mixable playback mid-call.
-    var callInProgress = false
-
     func install(in contentController: WKUserContentController) {
         contentController.addUserScript(WKUserScript(
             source: Self.scriptSource,
@@ -88,9 +84,8 @@ final class BackgroundKeepAlive {
     }
 
     /// Puts the audio session back into mixable playback; CallManager calls
-    /// this when a call releases it.
+    /// this after a call, since CallKit may have interrupted it.
     func activateAudioSession() {
-        guard !callInProgress else { return }
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playback, options: [.mixWithOthers])
