@@ -104,16 +104,33 @@ this to one year.
   chats that Teams has not rendered are not searched. This uses explicit unread
   attributes/indicator elements, not message text or font weight, and needs
   verification against the current Teams UI.
-- **Native tab transitions**: the old web page is covered by a temporary
-  in-memory snapshot while Teams switches. After the target tab is selected,
-  visible busy regions clear, DOM updates settle and transform animations end,
-  the snapshot fades out. A 1.5-second fallback always reveals the page; it is
-  not proof that the destination finished loading. The native tab bar stays
-  responsive, rapid switches invalidate old completion callbacks, and Reduce
-  Motion disables the native fade. No global Teams animations are disabled.
+- **One tap, one action**: Teams' desktop layout shows hover UI (a row's
+  "..." button) on the synthetic hover WebKit sends for a touch, and WebKit
+  then drops the click, so rows needed two taps. Finger-generated hover events
+  are not delivered to Teams (a real mouse or trackpad still hovers). Where
+  WebKit still holds the click for CSS hover/focus changes, a clean single
+  tap that got no click within 90 ms is clicked once; a late native click for
+  that tap is swallowed. Moves, long presses, text fields and taps that stop a
+  coasting list are excluded.
+- **No slide on tab switches**: measured on device, Teams slides the Activity
+  list in from x=-470 over ~430 ms and the Chat list from far left, dropping
+  frames. During a native tab switch only, both list panes appear in place.
+  Teams' own list/detail transitions are unchanged. Teams still renders the
+  Chat app in one long main-thread task (~400 ms measured with Web Inspector
+  attached); that delay is Teams' and is not hidden by an overlay.
+- **Tab navigation prioritizes response over custom transitions**: no snapshot
+  overlay or DOM/animation-settling delay is added. Every explicit tab tap is
+  dispatched; if Teams unmounted the app tile, the app bar is opened and the
+  tile is retried for up to 900 ms. A newer tab request cancels older retries.
+  Teams' own app-bar button stays hidden (More replaces it). Missing tiles
+  do not select More or hide the native bar; the last known app and badges are
+  retained while that markup is absent. Only a real other-app selection maps
+  to More. Teams' own animations are not globally disabled.
 - The selected native tab follows the visible destination: a conversation
   opened from Activity selects Chat, and a visible call screen selects Calls,
-  even if Teams' own app tile still says Activity. This changes the native
+  even if Teams' own app tile still says Activity. Markers must be topmost at
+  their position: Activity keeps the last conversation mounted beneath its
+  list. This changes the native
   selection only, without re-navigating or closing the opened conversation.
   Selecting Activity afterwards returns to the feed. Destination detection
   relies on Teams' chat-header/editor and calling UI markers and needs device
@@ -307,7 +324,6 @@ The existing `npm run lint` now also checks the standalone script files.
 | `OpenTeams/NotificationBridge.swift` | `window.Notification` shim, iOS notifications, app icon badge |
 | `OpenTeams/ShellBridge.swift` | Page script: Teams' app bar state (tabs, badges, back, theme) and actions for the native shell |
 | `OpenTeams/LoadingView.swift` | Native loading and error screen |
-| `OpenTeams/PageTransition.swift` | Bounded in-memory snapshot/fade for native tab switches |
 | `OpenTeams/WKWebView+InputAccessory.swift` | Removes the bar WebKit shows above the keyboard |
 | `OpenTeams/CallBridge.swift` | Page script: Teams call events and actions (answer, decline, hang up, mute, ringtone) |
 | `OpenTeams/CallManager.swift` | CallKit provider: incoming and ongoing calls, mapped to Teams |

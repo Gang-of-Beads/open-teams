@@ -26,7 +26,6 @@ final class TeamsViewController: UIViewController {
     private var cookiePathFixer: CookiePathFixer?
 
     private let tabBar = UITabBar()
-    private let tabTransition = PageTransition()
     private var lastChatTap: TimeInterval?
     private var lastChatTapWasSelected = false
     private let loadingView = LoadingView()
@@ -72,7 +71,7 @@ final class TeamsViewController: UIViewController {
             self?.callManager?.webRTCActivityChanged(active)
             UIApplication.shared.isIdleTimerDisabled = active
         }
-        sessionMaintenance.onRetry = { [weak self] in self?.loadTeams() }
+        sessionMaintenance.onRetry = { [weak self] in self?.loadTeams(reason: "network-retry") }
         sessionMaintenance.start(webView: webView)
 
         layOut()
@@ -155,13 +154,14 @@ final class TeamsViewController: UIViewController {
     // MARK: Loading
 
     private func setUpLoadingView() {
-        loadingView.onRetry = { [weak self] in self?.loadTeams() }
+        loadingView.onRetry = { [weak self] in self?.loadTeams(reason: "user-retry") }
         progressObservation = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] webView, _ in
             self?.loadingView.setProgress(webView.estimatedProgress)
         }
     }
 
-    private func loadTeams() {
+    private func loadTeams(reason: String = "start") {
+        print("[NAV] loadTeams reason=\(reason)")
         loadAttempts = 0
         if webView.url == nil {
             webView.load(URLRequest(url: TeamsConfig.startURL))
@@ -185,6 +185,7 @@ final class TeamsViewController: UIViewController {
                       ["teams.cloud.microsoft", "teams.microsoft.com"].contains(self.webView.url?.host ?? "")
                 else { return }
                 self.loadAttempts += 1
+                print("[NAV] reload reason=startup-stall")
                 self.webView.reload()
             },
             Timer.scheduledTimer(withTimeInterval: 75, repeats: false) { [weak self] _ in
@@ -301,6 +302,14 @@ extension TeamsViewController: WKNavigationDelegate {
         preferences: WKWebpagePreferences,
         decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void
     ) {
+        if webView === self.webView, navigationAction.targetFrame?.isMainFrame == true {
+            // Navigation type and host category only: never URLs or queries.
+            let host = navigationAction.request.url?.host ?? ""
+            let category = ["teams.cloud.microsoft", "teams.microsoft.com"].contains(host) ? "teams"
+                : TeamsConfig.isTrusted(navigationAction.request.url) ? "microsoft" : "other"
+            print("[NAV] main-frame type=\(navigationAction.navigationType.rawValue) host=\(category) " +
+                  "user=\(navigationAction.navigationType == .linkActivated) app=\(UIApplication.shared.applicationState.rawValue)")
+        }
         if navigationAction.shouldPerformDownload {
             decisionHandler(.download, preferences)
             return
@@ -342,13 +351,13 @@ extension TeamsViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard webView === self.webView, !Self.isIgnorableLoadError(error) else { return }
+        print("[NAV] provisional failure domain=\((error as NSError).domain) code=\((error as NSError).code)")
         sessionMaintenance.navigationFailed(error)
         showLoadError(error.localizedDescription)
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard webView === self.webView else { return }
-        tabTransition.cancel()
         lastChatTap = nil
         sessionMaintenance.navigationStarted()
         keepAlive.callInProgress = false
@@ -368,6 +377,7 @@ extension TeamsViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard webView === self.webView else { return }
+        print("[NAV] commit app=\(UIApplication.shared.applicationState.rawValue)")
         // A new page: Teams reports its state again once it has loaded.
         shellBridge.reset()
         setTabBarShown(false)
@@ -385,6 +395,7 @@ extension TeamsViewController: WKNavigationDelegate {
         // iOS kills the web content process under memory pressure; reload
         // rather than leaving a blank screen.
         if webView === self.webView {
+            print("[NAV] web content process terminated app=\(UIApplication.shared.applicationState.rawValue)")
             keepAlive.callInProgress = false
             UIApplication.shared.isIdleTimerDisabled = false
             // Reload once automatically; if the process keeps dying, ask the
@@ -394,7 +405,7 @@ extension TeamsViewController: WKNavigationDelegate {
                 return
             }
             lastAutomaticReload = Date()
-            loadTeams()
+            loadTeams(reason: "process-terminated")
         } else {
             closePopup(webView)
         }
@@ -543,10 +554,6 @@ extension TeamsViewController: WKDownloadDelegate {
 // MARK: - ShellBridgeDelegate
 
 extension TeamsViewController: ShellBridgeDelegate {
-    func shellBridge(_ bridge: ShellBridge, navigationSettled token: Int) {
-        tabTransition.finish(token: token)
-    }
-
     func shellBridge(_ bridge: ShellBridge, didUpdate state: ShellState) {
         if let themeColor = state.themeColor {
             apply(themeColor: themeColor)
@@ -581,7 +588,6 @@ extension TeamsViewController: UITabBarDelegate {
             lastChatTap = doubleTap ? nil : now
             lastChatTapWasSelected = alreadySelected
             if doubleTap {
-                tabTransition.cancel()
                 shellBridge.focusNextUnread()
                 UISelectionFeedbackGenerator().selectionChanged()
                 return
@@ -591,7 +597,6 @@ extension TeamsViewController: UITabBarDelegate {
             lastChatTapWasSelected = false
         }
         if tab == .more {
-            tabTransition.cancel()
             shellBridge.select(tab)
 
             // "More" opens Teams' app list over the page; the selection stays
@@ -600,11 +605,10 @@ extension TeamsViewController: UITabBarDelegate {
             if let current, let items = tabBar.items, current < items.count {
                 tabBar.selectedItem = items[current]
             }
-        } else if !alreadySelected {
-            // activeTab follows the visible destination, not just Teams'
-            // selected app tile (Activity can open Chat/Calls in place).
-            let token = tabTransition.begin(over: webView)
-            shellBridge.select(tab, transitionToken: token)
+        } else {
+            // Always dispatch explicit tab taps. The page may still be
+            // resolving a destination or displaying an in-app detail view.
+            shellBridge.select(tab)
         }
     }
 }
