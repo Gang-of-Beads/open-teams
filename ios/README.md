@@ -124,8 +124,10 @@ Teams.
 
 iOS normally suspends a web view about a second after the app leaves the
 foreground, which would stop Teams and all notifications. To keep it running,
-the page loops a silent audio clip and the app declares the `audio` background
-mode. Things to know:
+the page plays an inaudible tone (30 Hz at -80 dBFS, generated with Web Audio
+and played through a MediaStream) and the app declares the `audio` background
+mode. Routing it through a MediaStream keeps it out of Now Playing, so there
+is no media player on the lock screen or in Control Center. Things to know:
 
 - **Battery**: Teams keeps running in the background, so expect noticeably
   higher battery use than an app that relies on push notifications.
@@ -133,18 +135,61 @@ mode. Things to know:
   the session; nothing arrives until you open it again. There is no push
   service behind this app.
 - The audio session is mixable, so music from other apps keeps playing. A phone
-  call or another app taking exclusive audio can pause the clip; it resumes
-  when the app becomes active again.
-- The `audio` background mode for silent playback is fine for sideloading but
+  call, Siri or another app taking exclusive audio can pause the tone; the app
+  resumes it as soon as the interruption ends (and checks every 15 seconds).
+- The `audio` background mode for inaudible playback is fine for sideloading but
   would not pass App Store review.
+
+## Calls (CallKit)
+
+Teams calls are mirrored into CallKit, so they behave like phone calls:
+
+- **Incoming calls** ring with the full-screen iOS call UI, also on the lock
+  screen, following the ring/silent switch and Focus. Teams' own ringtone is
+  silenced while iOS rings. Answer and Decline click Teams' own buttons; if
+  the caller hangs up or you answer on another device, the iOS call UI goes
+  away.
+- **Calls and meetings you start or join in Teams** show as an ongoing call:
+  status bar / Dynamic Island indicator, Recents, and a cellular call
+  interrupts it properly.
+- **End and Mute** in the iOS call UI hang up and mute in Teams, and muting in
+  Teams shows in the iOS UI. Hold is not supported (Teams web has no hold).
+
+How it works: the app subscribes to Teams' internal command stream
+(`commandChangeReportingService`, the same source the desktop app uses in
+`app/browser/tools/activityHub.js`) for ringing, connected and disconnected
+events, and drives `#hangup-button`, `#microphone-button` and the
+incoming-call toast's buttons. Like everything that relies on Teams
+internals, this can break when Microsoft changes Teams web.
+
+Audio: Teams' audio, including the microphone, runs in WebKit's GPU process
+with its own audio session, so the app never switches its own session to a
+call mode (that took the microphone away from WebKit). While a CallKit call is
+active, WebKit cannot start its audio from scratch, so a call answered on the
+lock screen is handed over: the iOS call stays up until you open the app, then
+it ends, Teams accepts, and the connected Teams call shows in CallKit again
+(Recents lists it twice).
+
+Reporting incoming calls from the background requires the `voip` background
+mode (declared in `Config/Info.plist`; no PushKit is used), otherwise iOS
+rejects them. The web notification Teams raises for a ringing call is dropped
+while the iOS call UI shows it. Calls depend on the app running in the
+background (see above); nothing rings after the app is force-quit. CallKit does not work in the iOS
+Simulator; use a device.
 
 ## Known limitations
 
 - **Notifications need the app running.** They come from the Teams page
   itself, not a push service, so nothing arrives after the app is force-quit
   or killed by iOS (see above).
-- **Calls in the background are untested.** The keep-alive should keep meeting
-  audio going, but iOS stops camera capture for backgrounded apps.
+- **Answering from the lock screen or in the background connects once you
+  open the app.** WebKit only starts the microphone for a visible page, and
+  not while a CallKit call holds the audio, so the app accepts in Teams after
+  you tap the app button in the iOS call UI. The caller hears ringing until
+  then; if they hang up first, the iOS call ends too. iOS also stops the
+  camera for backgrounded apps.
+- **The Calendar does not load** in the embedded browser ("try the desktop
+  version"). Join meetings from the chat or the meeting link instead.
 - **No screen sharing.** `getDisplayMedia` is not available in `WKWebView` on
   iOS.
 - Microsoft can change Teams web at any time; if it starts rejecting this user
@@ -160,7 +205,10 @@ mode. Things to know:
 | `OpenTeams/PopupViewController.swift` | Sheet used for `window.open()` popups |
 | `OpenTeams/TeamsConfig.swift` | Start URL, user agent and trusted Microsoft hosts |
 | `OpenTeams/NotificationBridge.swift` | `window.Notification` shim, iOS notifications, app icon badge |
+| `OpenTeams/CallBridge.swift` | Page script: Teams call events and actions (answer, decline, hang up, mute, ringtone) |
+| `OpenTeams/CallManager.swift` | CallKit provider: incoming and ongoing calls, mapped to Teams |
+| `OpenTeams/WeakScriptMessageHandler.swift` | Breaks the retain cycle between WebKit and the script message handlers |
 | `OpenTeams/CookiePathFixer.swift` | Copies Teams cookies with a relative path to `/` so profile pictures load |
-| `OpenTeams/BackgroundKeepAlive.swift` | Silent audio loop that keeps the page running in the background |
+| `OpenTeams/BackgroundKeepAlive.swift` | Inaudible MediaStream tone that keeps the page running in the background without a Now Playing entry |
 | `Config/Info.plist` | Keys build settings cannot generate (`UIBackgroundModes`) |
 | `Config/Signing.xcconfig` | Signing defaults, includes the optional `Local.xcconfig` |
