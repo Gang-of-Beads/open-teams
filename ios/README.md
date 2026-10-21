@@ -96,6 +96,48 @@ this to one year.
   Swipe from the left edge to go back from a chat. The page does not
   rubber-band, controls have no web tap highlight or long-press menu, and the
   previous/next/done bar above the keyboard is gone.
+- **Chat tab double-tap**: while Chat is selected, double-tap within 350 ms
+  to return from a conversation to the list and locate the next loaded unread
+  chat. It scrolls and briefly outlines the row without clicking or marking it
+  read; repeated double-taps cycle through loaded unread rows. If none has a
+  recognized unread marker, the list scrolls to the top. Virtualized/off-screen
+  chats that Teams has not rendered are not searched. This uses explicit unread
+  attributes/indicator elements, not message text or font weight, and needs
+  verification against the current Teams UI.
+- **One tap, one action**: Teams' desktop layout shows hover UI (a row's
+  "..." button) on the synthetic hover WebKit sends for a touch, and WebKit
+  then drops the click, so rows needed two taps. Finger-generated hover events
+  are not delivered to Teams (a real mouse or trackpad still hovers). Where
+  WebKit still holds the click for CSS hover/focus changes, a clean single
+  tap that got no click within 90 ms is clicked once; a late native click for
+  that tap is swallowed. Moves, long presses, text fields and taps that stop a
+  coasting list are excluded.
+- **No slide on tab switches**: measured on device, Teams slides the Activity
+  list in from x=-470 over ~430 ms and the Chat list from far left, dropping
+  frames. During a native tab switch only, both list panes appear in place.
+  Teams' own list/detail transitions are unchanged. Teams still renders the
+  Chat app in one long main-thread task (~400 ms measured with Web Inspector
+  attached); that delay is Teams' and is not hidden by an overlay.
+- **Tab navigation prioritizes response over custom transitions**: no snapshot
+  overlay or DOM/animation-settling delay is added. Every explicit tab tap is
+  dispatched; if Teams unmounted the app tile, the app bar is opened and the
+  tile is retried for up to 900 ms. A newer tab request cancels older retries.
+  Teams' own app-bar button stays hidden (More replaces it). Missing tiles
+  do not select More or hide the native bar; the last known app and badges are
+  retained while that markup is absent. Only a real other-app selection maps
+  to More. Teams' own animations are not globally disabled.
+- The selected native tab follows the visible destination: a conversation
+  opened from Activity selects Chat, and a visible call screen selects Calls,
+  even if Teams' own app tile still says Activity. Markers must be topmost at
+  their position: Activity keeps the last conversation mounted beneath its
+  list. This changes the native
+  selection only, without re-navigating or closing the opened conversation.
+  Selecting Activity afterwards returns to the feed. Destination detection
+  relies on Teams' chat-header/editor and calling UI markers and needs device
+  verification after Teams updates.
+- The native startup screen is only shown for explicit loads/retries and web
+  process recovery, not ordinary in-session document navigation. Its initial
+  stall retry does not run during a call or on sign-in pages.
 - Downloaded files open in Quick Look (with its share button); anything it
   cannot preview goes to the share sheet.
 - Notifications show the sender's picture as a thumbnail when Teams provides

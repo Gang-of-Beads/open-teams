@@ -14,26 +14,194 @@
     button, [role="button"], [role="tab"], [role="treeitem"], [role="menuitem"], img {
       -webkit-touch-callout: none;
     }
+    /* Measured on device: on an app switch Teams' narrow layout slides the
+       list panes in from the left (Activity's sub-nav from x=-470 over
+       ~430 ms, Chat's mid-nav from x=-2600), dropping frames while the new
+       app renders. Only during a native tab switch, show them in place. The
+       panes' state classes are hashed, so this is scoped by time instead;
+       Teams' in-app list/detail transitions are left untouched. */
+    html.open-teams-switching :is([data-tid="app-layout-area--sub-nav"],
+                                  [data-tid="app-layout-area--mid-nav"]) {
+      transition: none !important;
+      transform: none !important;
+    }
   `;
   (document.head || document.documentElement).appendChild(style);
 
-  // Teams' app bar button, hidden while the native tab bar replaces it.
+  // One tap, one action. On touch, WebKit first sends synthetic hover events
+  // (mouseover/mouseenter/mousemove); Teams' desktop layout reacts by adding
+  // the row's "..." menu button, and WebKit then treats any hover-triggered
+  // page change as "show hover content" and drops the click (verified on
+  // device: no mousedown/mouseup/click on the first tap). Finger-generated
+  // hover events are not delivered to Teams; clicks, focus and pointer
+  // events are. A real mouse or trackpad (iPad) still gets hover.
+  let touchPointer = false;
+  for (const type of ["pointerover", "pointerdown"]) {
+    addEventListener(type, (event) => { touchPointer = event.pointerType === "touch"; }, true);
+  }
+  for (const type of ["mouseover", "mouseenter", "mousemove", "mouseout", "mouseleave"]) {
+    addEventListener(type, (event) => { if (touchPointer) event.stopImmediatePropagation(); }, true);
+  }
+
+  // WebKit can still hold the click for its "hover first" heuristic when
+  // CSS hover/focus styles change the row (verified on device: touchend,
+  // then no mousedown/click; a second tap on the same row clicks). For a
+  // clean single tap that WebKit did not click within 90 ms (its own click
+  // arrives 35-60 ms after touchend), click the tapped element. A late
+  // native click for the same tap is swallowed, so nothing activates twice.
+  // Excluded: moves, long presses, text fields, prevented touches, and taps
+  // that stop a list still coasting from a vertical fling (iOS does not
+  // click those either). A horizontal swipe back is not a fling.
+  let tap = null;
+  let flingTarget = null;
+  let flingScrolledAt = 0;
+  let flingTop = 0;
+  const scrollTop = (target) => (target === document ? document.scrollingElement?.scrollTop : target.scrollTop) || 0;
+  addEventListener("scroll", (event) => {
+    if (tap?.vertical) flingTarget = event.target;
+    if (event.target !== flingTarget) return;
+    const top = scrollTop(event.target);
+    if (Math.abs(top - flingTop) > 0.5) flingScrolledAt = performance.now();
+    flingTop = top;
+  }, { capture: true, passive: true });
+  addEventListener("touchstart", (event) => {
+    if (event.touches.length !== 1) { tap = null; return; }
+    const touch = event.touches[0];
+    tap = {
+      x: touch.clientX, y: touch.clientY, started: performance.now(), target: event.target,
+      moved: false, vertical: false, clicked: false, synthesized: false,
+      coasting: performance.now() - flingScrolledAt < 80,
+    };
+  }, { capture: true, passive: true });
+  addEventListener("touchmove", (event) => {
+    if (!tap) return;
+    const touch = event.touches[0];
+    const dx = touch.clientX - tap.x;
+    const dy = touch.clientY - tap.y;
+    if (Math.hypot(dx, dy) <= 10) return;
+    tap.moved = true;
+    if (Math.abs(dy) > Math.abs(dx)) tap.vertical = true;
+  }, { capture: true, passive: true });
+  addEventListener("touchcancel", () => { tap = null; }, true);
+  for (const type of ["mousedown", "mouseup", "click"]) {
+    addEventListener(type, (event) => {
+      if (!tap || !event.isTrusted) return;
+      if (tap.synthesized) {
+        event.stopImmediatePropagation();
+        event.preventDefault();
+      } else {
+        tap.clicked = true;
+      }
+    }, true);
+  }
+  addEventListener("touchend", (event) => {
+    const current = tap;
+    if (!current || event.defaultPrevented || current.moved || current.coasting ||
+        performance.now() - current.started > 500 ||
+        current.target.closest?.("input, textarea, select, [contenteditable]")) return;
+    setTimeout(() => {
+      if (current.clicked || tap !== current) return;
+      const element = current.target.isConnected ? current.target : document.elementFromPoint(current.x, current.y);
+      if (!element) return;
+      current.synthesized = true;
+      // SVG icons have no click(); a bubbling click reaches Teams' handlers.
+      element.dispatchEvent(new MouseEvent("click", {
+        bubbles: true, cancelable: true, composed: true, view: window,
+        clientX: current.x, clientY: current.y, detail: 1,
+      }));
+    }, 90);
+  }, true);
+
+  let switchTimer = 0;
+  const markSwitching = () => {
+    document.documentElement.classList.add("open-teams-switching");
+    clearTimeout(switchTimer);
+    switchTimer = setTimeout(() => document.documentElement.classList.remove("open-teams-switching"), 1200);
+  };
+
+  // Teams' app bar button duplicates the native More tab, so it is hidden
+  // while the native tab bar is shown. Clicking it still works when hidden.
   const tabsStyle = document.createElement("style");
   tabsStyle.textContent = `[data-tid="hamburger-button"] { display: none !important; }`;
   tabsStyle.disabled = true;
   (document.head || document.documentElement).appendChild(tabsStyle);
+  const appBarButton = () => document.querySelector(
+    '[data-tid="hamburger-button"], [data-testid="hamburger-button"]'
+  );
+  let lastApp = "chat";
+  let shellReady = false;
+  let pendingDestination = null;
+  const lastBadges = {};
 
   const unread = (id) => {
     const match = /\d+/.exec(document.getElementById("readerBox-" + id)?.textContent || "");
     return match ? Number.parseInt(match[0], 10) : 0;
   };
 
+  const visible = (element) => {
+    if (!element || element.hidden || getComputedStyle(element).visibility === "hidden") return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < innerWidth;
+  };
+  const onScreen = (element) => {
+    if (!visible(element)) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.bottom > 0 && rect.top < innerHeight;
+  };
+  // Activity keeps the last item's conversation mounted under its list, so
+  // geometry alone reports it on screen. Require it to be topmost.
+  const uncovered = (element) => {
+    if (!onScreen(element)) return false;
+    const rect = element.getBoundingClientRect();
+    const x = Math.min(Math.max(rect.left + rect.width / 2, 0), innerWidth - 1);
+    const y = Math.min(Math.max(rect.top + rect.height / 2, 0), innerHeight - 1);
+    const top = document.elementFromPoint(x, y);
+    return Boolean(top && (element.contains(top) || top.contains(element)));
+  };
+  const selectedApp = () => {
+    const selected = Object.entries(OPEN_TEAMS_APPS)
+      .find(([, id]) => document.getElementById(id)?.getAttribute("aria-pressed") === "true")?.[0];
+    // A closed/collapsed app bar can unmount all its tiles. Absence is not
+    // evidence that the user navigated to More.
+    if (pendingDestination && performance.now() < pendingDestination.until) return pendingDestination.tab;
+    pendingDestination = null;
+    if (selected) lastApp = selected;
+    return lastApp;
+  };
+  document.addEventListener("click", (event) => {
+    const tile = event.target?.closest?.('[data-is-launch-tile="true"]');
+    if (!tile) return;
+    const tab = Object.entries(OPEN_TEAMS_APPS).find(([, id]) =>
+      tile.id === id || tile.getAttribute("data-tid") === id
+    )?.[0] || "more";
+    lastApp = tab;
+    pendingDestination = { tab, until: performance.now() + 1200 };
+  }, true);
+  const currentPage = () => {
+    const root = document.querySelector('[role="main"]') || document.getElementById("app") || document;
+    if ([...root.querySelectorAll('#hangup-button')].some(uncovered)) return "calls";
+    // Activity can open a conversation without changing the app bar's
+    // aria-pressed tile. Select the destination tab visually without issuing
+    // another navigation or losing the conversation opened from the feed.
+    if (selectedApp() === "activity" && [...root.querySelectorAll(
+      '[data-tid^="chat-title-name"], [data-tid="chat-pane-list"], ' +
+      '[data-tid="ckeditor"], [data-testid="chat-header"]'
+    )].some(uncovered)) return "chat";
+    return selectedApp();
+  };
+
   let lastState = "";
   const report = () => {
     const entries = Object.entries(OPEN_TEAMS_APPS);
-    const ready = entries.some(([, id]) => document.getElementById(id));
-    const active = entries.find(([, id]) => document.getElementById(id)?.getAttribute("aria-pressed") === "true")?.[0] || "more";
-    const badges = Object.fromEntries(entries.map(([tab, id]) => [tab, unread(id)]));
+    shellReady ||= entries.some(([, id]) => document.getElementById(id)) ||
+      Boolean(document.querySelector('[data-tid="me-control-avatar-trigger"], [data-testid="me-control-avatar-trigger"]'));
+    const ready = shellReady;
+    const active = pendingDestination && performance.now() < pendingDestination.until
+      ? pendingDestination.tab : currentPage();
+    const badges = Object.fromEntries(entries.map(([tab, id]) => {
+      if (document.getElementById("readerBox-" + id)) lastBadges[tab] = unread(id);
+      return [tab, lastBadges[tab] || 0];
+    }));
     const back = Boolean(document.querySelector('[data-tid="layout-navigation-controls"]'));
     const theme = document.querySelector('meta[name="theme-color"]')?.content || "";
     const state = JSON.stringify({ ready, active, badges, back, theme });
@@ -41,6 +209,8 @@
     lastState = state;
     post({ type: "state", ready, active, badges, back, theme });
   };
+
+  let navigationGeneration = 0;
 
   // Coalesce Teams' frequent DOM changes into one report.
   let scheduled = false;
@@ -51,6 +221,8 @@
   };
   new MutationObserver(schedule).observe(document.documentElement, {
     subtree: true, childList: true, characterData: true,
+    // Do not observe style/class: Teams animates them every frame, and each
+    // record would schedule layout-reading work during the animation.
     attributes: true, attributeFilter: ["aria-pressed", "content"],
   });
   report();
@@ -60,10 +232,115 @@
     return Boolean(element);
   };
 
+  const select = (id) => {
+    const generation = ++navigationGeneration;
+    const tab = Object.entries(OPEN_TEAMS_APPS).find(([, value]) => value === id)?.[0];
+    if (!tab) return false;
+    const started = performance.now();
+    let expanded = false;
+    const attempt = () => {
+      if (generation !== navigationGeneration) return;
+      const button = document.getElementById(id) || document.querySelector('[data-tid="' + id + '"]');
+      if (button) {
+        if (tab === "activity" && selectedApp() === "activity" && currentPage() === "chat") {
+          click(document.querySelector('[data-tid="layout-navigation-controls"]'));
+        }
+        markSwitching();
+        click(button);
+        lastApp = tab;
+        pendingDestination = { tab, until: performance.now() + 1200 };
+        report();
+        post({ type: "navigationResult", tab, dispatched: true });
+        setTimeout(report, 1250);
+        return;
+      }
+      if (!expanded) {
+        expanded = true;
+        click(appBarButton());
+      }
+      if (performance.now() - started < 900) {
+        setTimeout(attempt, 50);
+      } else {
+        // Leave the original app bar available; do not silently select a tab
+        // whose command was never dispatched.
+        post({ type: "navigationResult", tab, dispatched: false });
+        lastState = "";
+        report();
+      }
+    };
+    attempt();
+    return true;
+  };
+
+  let lastUnread = null;
+  let focusGeneration = 0;
+  const unreadMarker = (row) => row.matches('[data-is-unread="true"], [data-unread="true"]') ||
+    Boolean(row.querySelector('[data-is-unread="true"], [data-unread="true"], ' +
+      '[data-testid="unread-indicator"], [data-testid="unread-icon"], ' +
+      '[data-tid="unread-indicator"], [data-tid="unread-badge"]'));
+  const scrollContainer = (element) => {
+    for (let parent = element; parent && parent !== document.body; parent = parent.parentElement) {
+      if (/(auto|scroll|overlay)/.test(getComputedStyle(parent).overflowY) &&
+          parent.scrollHeight > parent.clientHeight + 1) return parent;
+    }
+    return null;
+  };
+  const nextUnreadOrTop = (tree) => {
+    const rows = [...tree.querySelectorAll('[role="treeitem"]')].filter((row) =>
+      visible(row) && !row.querySelector('[role="treeitem"]') &&
+      !row.hasAttribute("aria-expanded") && !row.matches('[data-testid^="sc-channel-list-item-"]')
+    );
+    const scroller = scrollContainer(rows[0] || tree);
+    if (!scroller) return false;
+    const candidates = rows.filter(unreadMarker);
+    const key = (row) => row.getAttribute("data-chat-id") || row.getAttribute("data-itemid") || row.id || row;
+    const previous = candidates.findIndex((row) => key(row) === lastUnread);
+    const row = candidates.length ? candidates[(previous + 1) % candidates.length] : null;
+    if (!row) {
+      lastUnread = null;
+      scroller.scrollTo({ top: 0, behavior: "auto" });
+      return true;
+    }
+    lastUnread = key(row);
+    const offset = row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    scroller.scrollTo({ top: Math.max(0, scroller.scrollTop + offset - 12), behavior: "auto" });
+    // A temporary outline, not focus/click: never opens a chat or marks it read.
+    const previousOutline = row.style.outline;
+    row.style.outline = "2px solid Highlight";
+    setTimeout(() => { row.style.outline = previousOutline; }, 900);
+    return true;
+  };
+  const focusNextUnread = () => {
+    const generation = ++focusGeneration;
+    if (currentPage() !== "chat") return;
+    // A conversation opened from Activity still belongs to Activity's route;
+    // explicitly enter Chat only for this list-navigation gesture.
+    if (selectedApp() !== "chat") select(OPEN_TEAMS_APPS.chat);
+    const started = performance.now();
+    let returned = false;
+    const locate = () => {
+      if (generation !== focusGeneration) return;
+      if (selectedApp() === "chat") {
+        const back = document.querySelector('[data-tid="layout-navigation-controls"]');
+        if (!returned && visible(back)) {
+          returned = true;
+          click(back);
+        } else {
+          const tree = [...document.querySelectorAll('[role="tree"]')].find(visible);
+          if (tree && nextUnreadOrTop(tree)) return;
+        }
+      }
+      if (performance.now() - started < 1400) setTimeout(locate, 100);
+    };
+    // Return-to-list is asynchronous; do not target a hidden detail pane.
+    setTimeout(locate, 200);
+  };
+
   Object.defineProperty(window, "__openTeamsShell", {
     value: Object.freeze({
-      select: (id) => click(document.getElementById(id)),
-      openMore: () => click(document.querySelector('[data-tid="hamburger-button"]')),
+      select: (id) => { focusGeneration++; return select(id); },
+      focusNextUnread,
+      openMore: () => { navigationGeneration++; focusGeneration++; return click(appBarButton()); },
       goBack: () => click(document.querySelector('[data-tid="layout-navigation-controls"]')),
       setNativeTabs: (shown) => { tabsStyle.disabled = !shown; },
     }),

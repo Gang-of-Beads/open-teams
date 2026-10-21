@@ -14,6 +14,8 @@ enum TeamsTab: String, CaseIterable {
 struct ShellState: Equatable {
     /// Teams' app bar exists: the app has loaded and the user is signed in.
     var ready = false
+    /// Visible destination, which can differ from the selected Teams app
+    /// when Activity opens a conversation or a call in place.
     var activeTab: TeamsTab = .chat
     var badges: [TeamsTab: Int] = [:]
     /// A chat or channel is open over the list (narrow layout), so going back
@@ -36,7 +38,8 @@ protocol ShellBridgeDelegate: AnyObject {
 ///   tenant), `aria-pressed="true"` on the current one, and an unread count in
 ///   the screen reader text of `readerBox-<id>` ("3 new notifications").
 /// - `[data-tid="hamburger-button"]` opens the app bar with the other apps;
-///   it is hidden while the native tab bar is shown.
+///   it is hidden while the native tab bar is shown, but can still be
+///   clicked to mount tiles or open the More list.
 /// - `[data-tid="layout-navigation-controls"]` ("Return to list") closes an
 ///   open chat in the narrow layout.
 ///
@@ -63,10 +66,21 @@ final class ShellBridge: NSObject {
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         ))
+        #if DEBUG
+        contentController.addUserScript(WKUserScript(
+            source: Self.scoped(BundledScript.diagnostics.source),
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
+        #endif
         contentController.add(WeakScriptMessageHandler(self), name: Self.handlerName)
     }
 
     func select(_ tab: TeamsTab) {
+        #if DEBUG
+        let tapped = Int(Date().timeIntervalSince1970 * 1000)
+        webView?.evaluateJavaScript("window.__openTeamsDiagnostics?.trace(\"\(tab.rawValue)\", \(tapped)); undefined")
+        #endif
         if tab == .more {
             run("openMore()")
         } else if let id = Self.appIDs[tab] {
@@ -78,6 +92,8 @@ final class ShellBridge: NSObject {
 
     /// Hides Teams' own app bar button while the native tab bar is shown.
     func setNativeTabsShown(_ shown: Bool) { run("setNativeTabs(\(shown))") }
+
+    func focusNextUnread() { run("focusNextUnread()") }
 
     /// The page starts over (reload or new navigation).
     func reset() {
@@ -110,9 +126,23 @@ extension ShellBridge: WKScriptMessageHandler {
         let origin = message.frameInfo.securityOrigin
         guard message.frameInfo.isMainFrame,
               TeamsConfig.isTrusted(URL(string: "\(origin.protocol)://\(origin.host)")),
-              let payload = message.body as? [String: Any],
-              payload["type"] as? String == "state"
+              let payload = message.body as? [String: Any]
         else { return }
+        if payload["type"] as? String == "navigationResult",
+           let tab = TeamsTab(rawValue: payload["tab"] as? String ?? ""),
+           let dispatched = payload["dispatched"] as? Bool {
+            // Navigation state only; no messages, account identifiers or URLs.
+            print("[SHELL] Navigation \(tab.rawValue): \(dispatched ? "dispatched" : "target unavailable")")
+            return
+        }
+        #if DEBUG
+        if payload["type"] as? String == "diagnostic" {
+            // Timing and structural metadata only (see diagnostics.js).
+            print("[DIAG] \(payload["event"] as? String ?? "?") \(payload["data"] as? String ?? "")")
+            return
+        }
+        #endif
+        guard payload["type"] as? String == "state" else { return }
 
         var next = ShellState()
         next.ready = payload["ready"] as? Bool ?? false
@@ -135,12 +165,21 @@ extension ShellBridge: WKScriptMessageHandler {
 // MARK: - Page script
 
 extension ShellBridge {
-    static var scriptSource: String {
-        let apps = appIDs
+    private static var appsLiteral: String {
+        appIDs
             .map { "\"\($0.key.rawValue)\": \"\($0.value)\"" }
             .joined(separator: ", ")
-        return "const OPEN_TEAMS_APPS = {\(apps)};\n" + pageScript
     }
+
+    /// Block-scopes the shared constant. User scripts share the page's
+    /// global lexical scope: a second top-level `const` is a SyntaxError,
+    /// which Teams' global error handler treats as a failed app init
+    /// ("Oops, app failed to init") and then reloads the page.
+    private static func scoped(_ source: String) -> String {
+        "{\nconst OPEN_TEAMS_APPS = Object.freeze({\(appsLiteral)});\n" + source + "\n}\n"
+    }
+
+    static var scriptSource: String { scoped(pageScript) }
 
     /// Injected at document end in the main frame. Must not throw.
     private static let pageScript = BundledScript.shell.source

@@ -6,6 +6,7 @@ import PageScripts
 enum BundledScript: String {
     case backgroundKeepAlive
     case calls
+    case diagnostics
     case media
     case notifications
     case sessionMaintenance
@@ -16,6 +17,7 @@ enum BundledScript: String {
         switch self {
         case .backgroundKeepAlive: return EmbeddedScripts.backgroundKeepAlive
         case .calls: return EmbeddedScripts.calls
+        case .diagnostics: return EmbeddedScripts.diagnostics
         case .media: return EmbeddedScripts.media
         case .notifications: return EmbeddedScripts.notifications
         case .sessionMaintenance: return EmbeddedScripts.sessionMaintenance
