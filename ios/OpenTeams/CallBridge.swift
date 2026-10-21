@@ -162,15 +162,27 @@ extension CallBridge {
       subscribe();
       setInterval(subscribe, 5000);
 
-      // Microphone state, so the iOS call UI shows Teams' mute state.
+      // Microphone state, so the iOS call UI shows Teams' mute state. The
+      // button's data-state is "mic-off" while muted; anything else starting
+      // with "mic" is unmuted. Only a state that holds for a moment is
+      // reported: a value seen mid-toggle, sent to CallKit and mirrored back,
+      // would undo the user's change.
+      const readMuted = () => {
+        const state = document.getElementById("microphone-button")?.getAttribute("data-state") || "";
+        if (state.includes("off")) return true;
+        if (state.startsWith("mic")) return false;
+        return null;
+      };
       let lastMuted = null;
+      let muteTimer = null;
       const reportMuted = () => {
-        const mic = document.getElementById("microphone-button");
-        if (!mic) return;
-        const muted = mic.getAttribute("data-state") === "mic-off";
-        if (muted === lastMuted) return;
-        lastMuted = muted;
-        post({ type: "muted", muted });
+        clearTimeout(muteTimer);
+        muteTimer = setTimeout(() => {
+          const muted = readMuted();
+          if (muted === null || muted === lastMuted) return;
+          lastMuted = muted;
+          post({ type: "muted", muted });
+        }, 500);
       };
       new MutationObserver(reportMuted).observe(document.documentElement, {
         subtree: true, attributes: true, attributeFilter: ["data-state"],
@@ -228,9 +240,9 @@ extension CallBridge {
         return Boolean(button);
       };
       const setMuted = (muted) => {
-        const mic = document.getElementById("microphone-button");
-        if (!mic) return false;
-        if ((mic.getAttribute("data-state") === "mic-off") !== muted) mic.click();
+        const current = readMuted();
+        if (current === null) return false;
+        if (current !== muted) document.getElementById("microphone-button").click();
         return true;
       };
 

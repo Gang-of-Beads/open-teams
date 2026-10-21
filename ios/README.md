@@ -89,6 +89,18 @@ this to one year.
 
 ## How it behaves
 
+- **Native shell around Teams**: a tab bar for Activity, Chat, Calendar, Calls
+  and More (Teams' other apps) with unread badges, the status bar area in Teams' title
+  bar color with light/dark following Teams' theme, a loading screen with
+  automatic retry when Teams stalls, and a native error screen with Retry.
+  Swipe from the left edge to go back from a chat. The page does not
+  rubber-band, controls have no web tap highlight or long-press menu, and the
+  previous/next/done bar above the keyboard is gone.
+- Downloaded files open in Quick Look (with its share button); anything it
+  cannot preview goes to the share sheet.
+- Notifications show the sender's picture as a thumbnail when Teams provides
+  one.
+
 - Identifies as Microsoft Edge 145 on Windows. Teams web sends every phone
   and tablet browser, including iPad Safari and Android Edge/Chrome/Firefox,
   to an "open in the app" page, and many tenants use a Conditional Access
@@ -102,8 +114,6 @@ this to one year.
   are handed to the system.
 - Camera and microphone are available for calls and meetings after the iOS
   permission prompt.
-- Downloaded files are offered through the share sheet (Save to Files,
-  AirDrop, open in another app).
 - Profile pictures: Teams sets its avatar cookie with a relative `Path`,
   which Chromium tolerates but WebKit stores literally and never sends, so
   every avatar request fails with 401. The app copies such Teams cookies to
@@ -152,8 +162,11 @@ Teams calls are mirrored into CallKit, so they behave like phone calls:
 - **Calls and meetings you start or join in Teams** show as an ongoing call:
   status bar / Dynamic Island indicator, Recents, and a cellular call
   interrupts it properly.
-- **End and Mute** in the iOS call UI hang up and mute in Teams, and muting in
-  Teams shows in the iOS UI. Hold is not supported (Teams web has no hold).
+- **End and Mute** in the iOS call UI hang up and toggle mute in Teams. Hold
+  is not supported (Teams web has no hold). The mute state lives in Teams:
+  CallKit's own mute is a system-level microphone mute that WebKit undoes,
+  which turned the microphone back on, so it is never applied and the iOS
+  mute button does not stay highlighted.
 
 How it works: the app subscribes to Teams' internal command stream
 (`commandChangeReportingService`, the same source the desktop app uses in
@@ -188,8 +201,8 @@ Simulator; use a device.
   you tap the app button in the iOS call UI. The caller hears ringing until
   then; if they hang up first, the iOS call ends too. iOS also stops the
   camera for backgrounded apps.
-- **The Calendar does not load** in the embedded browser ("try the desktop
-  version"). Join meetings from the chat or the meeting link instead.
+- **Muting in a call may turn itself off again (known issue).** CallKit and
+  WebKit both act on the microphone's mute state; this is being worked on.
 - **No screen sharing.** `getDisplayMedia` is not available in `WKWebView` on
   iOS.
 - Microsoft can change Teams web at any time; if it starts rejecting this user
@@ -205,6 +218,9 @@ Simulator; use a device.
 | `OpenTeams/PopupViewController.swift` | Sheet used for `window.open()` popups |
 | `OpenTeams/TeamsConfig.swift` | Start URL, user agent and trusted Microsoft hosts |
 | `OpenTeams/NotificationBridge.swift` | `window.Notification` shim, iOS notifications, app icon badge |
+| `OpenTeams/ShellBridge.swift` | Page script: Teams' app bar state (tabs, badges, back, theme) and actions for the native shell |
+| `OpenTeams/LoadingView.swift` | Native loading and error screen |
+| `OpenTeams/WKWebView+InputAccessory.swift` | Removes the bar WebKit shows above the keyboard |
 | `OpenTeams/CallBridge.swift` | Page script: Teams call events and actions (answer, decline, hang up, mute, ringtone) |
 | `OpenTeams/CallManager.swift` | CallKit provider: incoming and ongoing calls, mapped to Teams |
 | `OpenTeams/WeakScriptMessageHandler.swift` | Breaks the retain cycle between WebKit and the script message handlers |
