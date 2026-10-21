@@ -26,6 +26,8 @@ final class TeamsViewController: UIViewController {
     private var cookiePathFixer: CookiePathFixer?
 
     private let tabBar = UITabBar()
+    private var lastChatTap: TimeInterval?
+    private var lastChatTapWasSelected = false
     private let loadingView = LoadingView()
     private var webViewAboveTabBar: NSLayoutConstraint!
     private var progressObservation: NSKeyValueObservation?
@@ -69,7 +71,7 @@ final class TeamsViewController: UIViewController {
             self?.callManager?.webRTCActivityChanged(active)
             UIApplication.shared.isIdleTimerDisabled = active
         }
-        sessionMaintenance.onRetry = { [weak self] in self?.loadTeams() }
+        sessionMaintenance.onRetry = { [weak self] in self?.loadTeams(reason: "network-retry") }
         sessionMaintenance.start(webView: webView)
 
         layOut()
@@ -152,13 +154,14 @@ final class TeamsViewController: UIViewController {
     // MARK: Loading
 
     private func setUpLoadingView() {
-        loadingView.onRetry = { [weak self] in self?.loadTeams() }
+        loadingView.onRetry = { [weak self] in self?.loadTeams(reason: "user-retry") }
         progressObservation = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] webView, _ in
             self?.loadingView.setProgress(webView.estimatedProgress)
         }
     }
 
-    private func loadTeams() {
+    private func loadTeams(reason: String = "start") {
+        print("[NAV] loadTeams reason=\(reason)")
         loadAttempts = 0
         if webView.url == nil {
             webView.load(URLRequest(url: TeamsConfig.startURL))
@@ -177,8 +180,12 @@ final class TeamsViewController: UIViewController {
         loadingView.isHidden = false
         loadingTimers = [
             Timer.scheduledTimer(withTimeInterval: 40, repeats: false) { [weak self] _ in
-                guard let self, !self.shellBridge.state.ready, self.loadAttempts == 0 else { return }
+                guard let self, !self.shellBridge.state.ready, self.loadAttempts == 0,
+                      !self.keepAlive.callInProgress,
+                      ["teams.cloud.microsoft", "teams.microsoft.com"].contains(self.webView.url?.host ?? "")
+                else { return }
                 self.loadAttempts += 1
+                print("[NAV] reload reason=startup-stall")
                 self.webView.reload()
             },
             Timer.scheduledTimer(withTimeInterval: 75, repeats: false) { [weak self] _ in
@@ -295,6 +302,14 @@ extension TeamsViewController: WKNavigationDelegate {
         preferences: WKWebpagePreferences,
         decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void
     ) {
+        if webView === self.webView, navigationAction.targetFrame?.isMainFrame == true {
+            // Navigation type and host category only: never URLs or queries.
+            let host = navigationAction.request.url?.host ?? ""
+            let category = ["teams.cloud.microsoft", "teams.microsoft.com"].contains(host) ? "teams"
+                : TeamsConfig.isTrusted(navigationAction.request.url) ? "microsoft" : "other"
+            print("[NAV] main-frame type=\(navigationAction.navigationType.rawValue) host=\(category) " +
+                  "user=\(navigationAction.navigationType == .linkActivated) app=\(UIApplication.shared.applicationState.rawValue)")
+        }
         if navigationAction.shouldPerformDownload {
             decisionHandler(.download, preferences)
             return
@@ -336,12 +351,14 @@ extension TeamsViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard webView === self.webView, !Self.isIgnorableLoadError(error) else { return }
+        print("[NAV] provisional failure domain=\((error as NSError).domain) code=\((error as NSError).code)")
         sessionMaintenance.navigationFailed(error)
         showLoadError(error.localizedDescription)
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         guard webView === self.webView else { return }
+        lastChatTap = nil
         sessionMaintenance.navigationStarted()
         keepAlive.callInProgress = false
         UIApplication.shared.isIdleTimerDisabled = false
@@ -360,14 +377,16 @@ extension TeamsViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard webView === self.webView else { return }
+        print("[NAV] commit app=\(UIApplication.shared.applicationState.rawValue)")
         // A new page: Teams reports its state again once it has loaded.
         shellBridge.reset()
         setTabBarShown(false)
         backGesture.isEnabled = false
-        if TeamsConfig.isTrusted(webView.url), webView.url?.host?.contains("teams") == true {
-            if loadingView.isHidden { showLoading() }
-        } else {
-            // Sign-in and other pages are shown as they are.
+        // Do not turn ordinary in-session document navigation into another
+        // cold start (and a new 40-second reload timer). loadTeams() alone
+        // shows the native loading screen for explicit loads and recovery.
+        if !["teams.cloud.microsoft", "teams.microsoft.com"].contains(webView.url?.host ?? "") {
+            // Never cover interactive sign-in pages or reload them on a timer.
             hideLoading()
         }
     }
@@ -376,6 +395,7 @@ extension TeamsViewController: WKNavigationDelegate {
         // iOS kills the web content process under memory pressure; reload
         // rather than leaving a blank screen.
         if webView === self.webView {
+            print("[NAV] web content process terminated app=\(UIApplication.shared.applicationState.rawValue)")
             keepAlive.callInProgress = false
             UIApplication.shared.isIdleTimerDisabled = false
             // Reload once automatically; if the process keeps dying, ask the
@@ -385,11 +405,7 @@ extension TeamsViewController: WKNavigationDelegate {
                 return
             }
             lastAutomaticReload = Date()
-            if webView.url == nil {
-                webView.load(URLRequest(url: TeamsConfig.startURL))
-            } else {
-                webView.reload()
-            }
+            loadTeams(reason: "process-terminated")
         } else {
             closePopup(webView)
         }
@@ -562,15 +578,37 @@ extension TeamsViewController: ShellBridgeDelegate {
 
 extension TeamsViewController: UITabBarDelegate {
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+        guard Self.tabItems.indices.contains(item.tag) else { return }
         let tab = Self.tabItems[item.tag].0
-        shellBridge.select(tab)
+        let alreadySelected = shellBridge.state.activeTab == tab
+        let now = ProcessInfo.processInfo.systemUptime
+        if tab == .chat {
+            let doubleTap = alreadySelected && lastChatTapWasSelected &&
+                lastChatTap.map { now - $0 <= 0.35 } == true
+            lastChatTap = doubleTap ? nil : now
+            lastChatTapWasSelected = alreadySelected
+            if doubleTap {
+                shellBridge.focusNextUnread()
+                UISelectionFeedbackGenerator().selectionChanged()
+                return
+            }
+        } else {
+            lastChatTap = nil
+            lastChatTapWasSelected = false
+        }
         if tab == .more {
+            shellBridge.select(tab)
+
             // "More" opens Teams' app list over the page; the selection stays
             // on the current app until Teams switches.
             let current = Self.tabItems.firstIndex { $0.0 == shellBridge.state.activeTab }
             if let current, let items = tabBar.items, current < items.count {
                 tabBar.selectedItem = items[current]
             }
+        } else {
+            // Always dispatch explicit tab taps. The page may still be
+            // resolving a destination or displaying an in-app detail view.
+            shellBridge.select(tab)
         }
     }
 }
