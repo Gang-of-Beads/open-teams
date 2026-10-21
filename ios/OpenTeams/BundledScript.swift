@@ -1,8 +1,6 @@
-import Foundation
-
-/// Typed names for page scripts shipped as app resources in Scripts/.
-/// Xcode's synchronized group includes them in Copy Bundle Resources without
-/// a generator, shell build phase or reference to the developer's source tree.
+/// Typed access to JavaScript embedded in the executable at build time.
+/// EmbeddedScripts is generated in DERIVED_FILE_DIR before Compile Sources.
+/// No runtime bundle lookup or file I/O is involved.
 enum BundledScript: String {
     case backgroundKeepAlive
     case calls
@@ -13,19 +11,14 @@ enum BundledScript: String {
     case viewport
 
     var source: String {
-        // Synchronized groups can flatten individual resource files into the
-        // bundle root; also support a preserved Scripts directory.
-        let bundle = Bundle.main
-        guard let url = bundle.url(forResource: rawValue, withExtension: "js", subdirectory: "Scripts")
-            ?? bundle.url(forResource: rawValue, withExtension: "js") else {
-            preconditionFailure("Missing bundled script: \(rawValue).js")
-        }
-        do {
-            return try String(contentsOf: url, encoding: .utf8)
-        } catch {
-            // A broken build must not silently run without media protection,
-            // notification shims or the native-shell bridge.
-            preconditionFailure("Cannot read bundled script: \(rawValue).js")
+        switch self {
+        case .backgroundKeepAlive: return EmbeddedScripts.backgroundKeepAlive
+        case .calls: return EmbeddedScripts.calls
+        case .media: return EmbeddedScripts.media
+        case .notifications: return EmbeddedScripts.notifications
+        case .sessionMaintenance: return EmbeddedScripts.sessionMaintenance
+        case .shell: return EmbeddedScripts.shell
+        case .viewport: return EmbeddedScripts.viewport
         }
     }
 }
