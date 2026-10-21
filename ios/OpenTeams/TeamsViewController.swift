@@ -19,6 +19,8 @@ final class TeamsViewController: UIViewController {
     private let notificationBridge = NotificationBridge()
     private let keepAlive = BackgroundKeepAlive()
     private let callBridge = CallBridge()
+    private let mediaBridge = MediaBridge()
+    private let sessionMaintenance = SessionMaintenance()
     private let shellBridge = ShellBridge()
     private var callManager: CallManager?
     private var cookiePathFixer: CookiePathFixer?
@@ -47,6 +49,7 @@ final class TeamsViewController: UIViewController {
         cookiePathFixer = CookiePathFixer(store: configuration.websiteDataStore.httpCookieStore)
         notificationBridge.install(in: configuration.userContentController)
         keepAlive.install(in: configuration.userContentController)
+        mediaBridge.install(in: configuration.userContentController)
         callBridge.install(in: configuration.userContentController)
         shellBridge.install(in: configuration.userContentController)
         webView = makeWebView(configuration: configuration)
@@ -61,6 +64,13 @@ final class TeamsViewController: UIViewController {
         shellBridge.webView = webView
         shellBridge.delegate = self
         callManager = CallManager(bridge: callBridge, keepAlive: keepAlive, notifications: notificationBridge)
+        mediaBridge.onCallActivity = { [weak self] active in
+            self?.keepAlive.callInProgress = active
+            self?.callManager?.webRTCActivityChanged(active)
+            UIApplication.shared.isIdleTimerDisabled = active
+        }
+        sessionMaintenance.onRetry = { [weak self] in self?.loadTeams() }
+        sessionMaintenance.start(webView: webView)
 
         layOut()
         setUpTabBar()
@@ -68,6 +78,10 @@ final class TeamsViewController: UIViewController {
         setUpLoadingView()
 
         loadTeams()
+    }
+
+    deinit {
+        UIApplication.shared.isIdleTimerDisabled = false
     }
 
     // MARK: Layout
@@ -339,6 +353,25 @@ extension TeamsViewController: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         guard webView === self.webView, !Self.isIgnorableLoadError(error) else { return }
+        sessionMaintenance.navigationFailed(error)
+        showLoadError(error.localizedDescription)
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        guard webView === self.webView else { return }
+        sessionMaintenance.navigationStarted()
+        keepAlive.callInProgress = false
+        UIApplication.shared.isIdleTimerDisabled = false
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard webView === self.webView else { return }
+        sessionMaintenance.navigationSucceeded()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        guard webView === self.webView, !Self.isIgnorableLoadError(error) else { return }
+        sessionMaintenance.navigationFailed(error)
         showLoadError(error.localizedDescription)
     }
 
@@ -360,6 +393,8 @@ extension TeamsViewController: WKNavigationDelegate {
         // iOS kills the web content process under memory pressure; reload
         // rather than leaving a blank screen.
         if webView === self.webView {
+            keepAlive.callInProgress = false
+            UIApplication.shared.isIdleTimerDisabled = false
             // Reload once automatically; if the process keeps dying, ask the
             // user instead of looping.
             if let last = lastAutomaticReload, Date().timeIntervalSince(last) < 10 {
