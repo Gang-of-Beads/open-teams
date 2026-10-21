@@ -104,4 +104,5 @@
         <item>Linux 上的 Chrome</item>
         <item>Windows 上的 Chrome</item>
     </string-array>
+    <string name="audio_route_failed">无法切换音频设备，请检查耳机连接后重试。</string>
 </resources>

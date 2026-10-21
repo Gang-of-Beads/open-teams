@@ -98,6 +98,44 @@ Design Icons (Apache-2.0).
 | Ringing screen: decline (`#c4314b`), accept (brand `#5b5fc7`), dark stage (`#252424`) | Same layout and colors |
 | Join meeting by ID (`MeetingJoinByCodeActivity`) | "Join a meeting" by link or ID and passcode |
 
+## Testing incoming calls and audio
+
+Use an emulator or a dedicated test account; never send messages or place calls
+in real conversations for a UI smoke test. `node scripts/check-incoming-call.mjs`
+checks the incoming-call DOM fallback and answer/decline actions without a
+Teams session. `node scripts/check-preload.mjs` checks the generated bundle
+after a Gradle build.
+
+Call detection primarily uses Teams' internal events. A visible pair of
+accept/decline controls is a fallback when those events fail. It does not
+replace primary caller details or click the same legacy control twice.
+
+For a real incoming test, allow notifications and full-screen calls in Android
+settings. Have a consenting tester call the signed-in account. Check foreground,
+background and locked-screen ringing, audio-only answer, decline, caller cancel,
+and hangup. Repeat with battery optimization enabled: missing a call here means
+the WebView was suspended, not that an FCM message failed.
+
+During a call, use the native audio-route button for speaker, earpiece, wired/USB
+headset and Bluetooth routes exposed by Android. Routing to a headset normally
+also selects its microphone; independent input/output combinations are not
+guaranteed. Teams' microphone picker can only select inputs WebView exposes.
+An emulator cannot verify physical Bluetooth/USB microphones or two-way audio.
+
+Android 15 emulator smoke checks (synthetic DOM only, no Teams call placed):
+
+- Incoming `CallStyle` notification appears both foreground and background.
+- Audio answer requests microphone permission and clicks only the audio button.
+- Decline removes the incoming notification and the synthetic call controls.
+- With the display asleep, an incoming fixture wakes the screen and opens
+  `IncomingCallActivity`; removing the fixture dismisses it.
+- The audio menu exposes Speaker on the emulator and Telecom enters
+  `MODE_IN_COMMUNICATION`. Microphone capture returns a live mono 16 kHz track
+  with echo cancellation; tracks are stopped after the check.
+
+These checks exercise local Android integration, not server delivery, audible
+ringtone, FCM, physical headset routing or real two-way speech.
+
 ## Known limitations
 
 - Microsoft does not support Teams web on mobile, so the app identifies as

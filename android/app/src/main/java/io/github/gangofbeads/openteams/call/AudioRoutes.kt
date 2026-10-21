@@ -8,6 +8,7 @@ import android.os.OutcomeReceiver
 import android.telecom.CallAudioState
 import android.telecom.CallEndpoint
 import android.telecom.CallEndpointException
+import android.widget.Toast
 import io.github.gangofbeads.openteams.R
 
 /** Earpiece / speaker / headset / Bluetooth for the current call, like the native call screen's audio button. */
@@ -35,6 +36,7 @@ object AudioRoutes {
                         context.mainExecutor,
                         object : OutcomeReceiver<Void, CallEndpointException> {
                             override fun onResult(result: Void?) = Unit
+                            override fun onError(error: CallEndpointException) = routeFailed(context)
                         },
                     )
                 }
@@ -55,9 +57,9 @@ object AudioRoutes {
         }
         val audio = context.getSystemService(AudioManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return audio.availableCommunicationDevices.filter { it.type in DEVICE_TYPES }.distinctBy { it.type }.map { device ->
+            return audio.availableCommunicationDevices.filter { it.type in DEVICE_TYPES }.map { device ->
                 Route(deviceLabel(context, device), deviceIcon(device.type), audio.communicationDevice?.id == device.id) {
-                    audio.setCommunicationDevice(device)
+                    if (!audio.setCommunicationDevice(device)) routeFailed(context)
                 }
             }
         }
@@ -68,6 +70,10 @@ object AudioRoutes {
             Route(context.getString(R.string.route_phone), R.drawable.ic_phone_in_talk, !speaker) { audio.isSpeakerphoneOn = false },
             Route(context.getString(R.string.route_speaker), R.drawable.ic_volume_up, speaker) { audio.isSpeakerphoneOn = true },
         )
+    }
+
+    private fun routeFailed(context: Context) {
+        Toast.makeText(context, R.string.audio_route_failed, Toast.LENGTH_LONG).show()
     }
 
     private val DEVICE_TYPES = setOf(

@@ -122,4 +122,5 @@
         <item>linux</item>
         <item>windows</item>
     </string-array>
+    <string name="audio_route_failed">Could not switch audio device. Check that the headset is connected and try again.</string>
 </resources>

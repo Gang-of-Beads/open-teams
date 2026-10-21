@@ -185,6 +185,57 @@ AndroidNotification.requestPermission = async () => "granted";
 Object.defineProperty(AndroidNotification, "permission", { get: () => "granted" });
 globalThis.Notification = AndroidNotification;
 
+// --- Incoming-call DOM fallback ---------------------------------------------
+// Teams' internal command service can change independently of its call UI.
+function watchIncomingCalls() {
+  const hub = load("browser/tools/activityHub.js");
+  const selectors = {
+    ACCEPT_AUDIO: 'button[aria-label="Accept with audio"], button[aria-label="接受音频"], button[aria-label="使用音频接听"]',
+    ACCEPT_VIDEO: 'button[aria-label="Accept with video"], button[aria-label="接受视频"], button[aria-label="使用视频接听"]',
+    DECLINE: 'button[aria-label="Decline call"], button[aria-label="拒绝通话"], [data-tid="toast-decline-call"], [data-tid="calling-toast-decline"]',
+  };
+  const accept = `${selectors.ACCEPT_AUDIO}, ${selectors.ACCEPT_VIDEO}, [data-tid="toast-accept-call"], [data-tid="calling-toast-accept"]`;
+  const shown = (selector) => [...document.querySelectorAll(selector)].find((node) => {
+    const rect = node.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+  let ringing = false;
+  let reported = false;
+  let primaryRinging = false;
+  hub.on("incoming-call-created", () => { primaryRinging = true; });
+  hub.on("incoming-call-ended", () => { primaryRinging = false; });
+  let timer = 0;
+  const scan = () => {
+    timer = 0;
+    // Both controls must exist: a pre-join screen is not an incoming call.
+    const incoming = Boolean(shown(accept) && shown(selectors.DECLINE));
+    if (incoming === ringing) return;
+    ringing = incoming;
+    if (incoming) {
+      // Keep the richer caller details if the primary detector already reported it.
+      reported = !primaryRinging;
+      if (reported) {
+        const title = document.querySelector('[data-tid="calling-toast-title"], [data-testid="calling-title"]');
+        hub.emit("incoming-call-created", { caller: title?.textContent?.trim() || "" });
+      }
+    } else if (reported) {
+      reported = false;
+      hub.emit("incoming-call-ended");
+    }
+  };
+  new MutationObserver(() => {
+    if (!timer) timer = setTimeout(scan, 100);
+  }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label", "hidden", "style"] });
+  setInterval(scan, 1000); // also works when a background WebView throttles animation frames
+  scan();
+  ipcRenderer.on("incoming-call-action", (_event, action) => {
+    // activityManager already handles the old button wrappers; do not click twice.
+    if (document.querySelector('[data-testid="calling-actions"], [data-testid="msn-actions"]')) return;
+    if (!Object.hasOwn(selectors, action)) return;
+    shown(selectors[action])?.click();
+  });
+}
+
 // --- Camera and microphone permission state ------------------------------------
 // WebView keeps no per-site permission state, so permissions.query() answers
 // "prompt" even once Android has granted the app the camera and microphone,
@@ -860,6 +911,7 @@ ipcRenderer.invoke("get-config").then((config) => {
     try {
       const ActivityManager = load("browser/notifications/activityManager.js");
       new ActivityManager(ipcRenderer, config).start();
+      watchIncomingCalls();
     } catch (err) {
       console.error("[OpenTeams] ActivityManager failed to initialize", err);
     }

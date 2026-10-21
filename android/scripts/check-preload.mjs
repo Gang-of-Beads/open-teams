@@ -58,6 +58,7 @@ const context = {
     documentElement: element(),
     addEventListener: (type, fn) => (listeners[type] = fn),
     querySelector: () => null,
+    querySelectorAll: () => [],
     createElement: element,
   },
   addEventListener() {},
