@@ -124,8 +124,10 @@ Teams.
 
 iOS normally suspends a web view about a second after the app leaves the
 foreground, which would stop Teams and all notifications. To keep it running,
-the page loops a silent audio clip and the app declares the `audio` background
-mode. Things to know:
+the page plays an inaudible tone (30 Hz at -80 dBFS, generated with Web Audio
+and played through a MediaStream) and the app declares the `audio` background
+mode. Routing it through a MediaStream keeps it out of Now Playing, so there
+is no media player on the lock screen or in Control Center. Things to know:
 
 - **Battery**: Teams keeps running in the background, so expect noticeably
   higher battery use than an app that relies on push notifications.
@@ -133,9 +135,9 @@ mode. Things to know:
   the session; nothing arrives until you open it again. There is no push
   service behind this app.
 - The audio session is mixable, so music from other apps keeps playing. A phone
-  call or another app taking exclusive audio can pause the clip; it resumes
-  when the app becomes active again.
-- The `audio` background mode for silent playback is fine for sideloading but
+  call, Siri or another app taking exclusive audio can pause the tone; the app
+  resumes it as soon as the interruption ends (and checks every 15 seconds).
+- The `audio` background mode for inaudible playback is fine for sideloading but
   would not pass App Store review.
 
 ## Known limitations
@@ -161,6 +163,6 @@ mode. Things to know:
 | `OpenTeams/TeamsConfig.swift` | Start URL, user agent and trusted Microsoft hosts |
 | `OpenTeams/NotificationBridge.swift` | `window.Notification` shim, iOS notifications, app icon badge |
 | `OpenTeams/CookiePathFixer.swift` | Copies Teams cookies with a relative path to `/` so profile pictures load |
-| `OpenTeams/BackgroundKeepAlive.swift` | Silent audio loop that keeps the page running in the background |
+| `OpenTeams/BackgroundKeepAlive.swift` | Inaudible MediaStream tone that keeps the page running in the background without a Now Playing entry |
 | `Config/Info.plist` | Keys build settings cannot generate (`UIBackgroundModes`) |
 | `Config/Signing.xcconfig` | Signing defaults, includes the optional `Local.xcconfig` |
