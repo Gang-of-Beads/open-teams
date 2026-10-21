@@ -1,5 +1,7 @@
+import PageScripts
+
 /// Typed access to JavaScript embedded in the executable at build time.
-/// EmbeddedScripts is generated in DERIVED_FILE_DIR before Compile Sources.
+/// The local PageScripts package's Build Tool Plugin generates the constants.
 /// No runtime bundle lookup or file I/O is involved.
 enum BundledScript: String {
     case backgroundKeepAlive
