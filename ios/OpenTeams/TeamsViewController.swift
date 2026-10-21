@@ -51,8 +51,36 @@ final class TeamsViewController: UIViewController {
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop
         // Sign-in and "open in new window" flows call window.open from async code.
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: viewportScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         return configuration
     }
+
+    /// iOS zooms into a focused text field whose font is smaller than 16px,
+    /// and Teams' message box uses 14px, so typing zoomed the page and pushed
+    /// the send button off screen. maximum-scale=1 turns that zoom off (and
+    /// pinch zoom with it). Teams can rewrite the tag, so it is reapplied.
+    private static let viewportScript = #"""
+    (() => {
+      const content = "width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no";
+      const apply = () => {
+        let meta = document.querySelector('meta[name="viewport"]');
+        if (!meta) {
+          meta = document.createElement("meta");
+          meta.name = "viewport";
+          (document.head || document.documentElement).appendChild(meta);
+        }
+        if (meta.content !== content) meta.content = content;
+      };
+      apply();
+      new MutationObserver(apply).observe(document.head || document.documentElement, {
+        subtree: true, childList: true, attributes: true, attributeFilter: ["content"],
+      });
+    })();
+    """#
 
     /// Creates a web view wired to this controller. Popups must use the
     /// configuration WebKit passes in so they share the opener's session.
