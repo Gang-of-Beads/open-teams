@@ -1,10 +1,11 @@
 import WebKit
 
 /// The tabs the native tab bar offers. `more` covers every other Teams app
-/// (Calendar, OneDrive and so on) through Teams' own app bar.
+/// (OneDrive, Copilot and so on) through Teams' own app bar.
 enum TeamsTab: String, CaseIterable {
     case activity
     case chat
+    case calendar
     case calls
     case more
 }
@@ -48,6 +49,7 @@ final class ShellBridge: NSObject {
     static let appIDs: [TeamsTab: String] = [
         .activity: "14d6962d-6eeb-4f48-8890-de55454bb136",
         .chat: "3b64df9d-7e97-4d9c-ac5c-2e0a5d8e6f40",
+        .calendar: "ef56c0de-36fc-4ef8-b417-3d82ba9d073c",
         .calls: "20c3440d-c67e-4420-9f80-0e50c39693df",
     ]
 

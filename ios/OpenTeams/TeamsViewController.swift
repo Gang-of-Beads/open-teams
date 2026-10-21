@@ -34,6 +34,7 @@ final class TeamsViewController: UIViewController {
     private static let tabItems: [(TeamsTab, String, String)] = [
         (.activity, String(localized: "Activity"), "bell"),
         (.chat, String(localized: "Chat"), "bubble.left.and.bubble.right"),
+        (.calendar, String(localized: "Calendar"), "calendar"),
         (.calls, String(localized: "Calls"), "phone"),
         (.more, String(localized: "More"), "ellipsis"),
     ]

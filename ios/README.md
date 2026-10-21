@@ -89,8 +89,8 @@ this to one year.
 
 ## How it behaves
 
-- **Native shell around Teams**: a tab bar for Activity, Chat, Calls and More
-  (Teams' other apps) with unread badges, the status bar area in Teams' title
+- **Native shell around Teams**: a tab bar for Activity, Chat, Calendar, Calls
+  and More (Teams' other apps) with unread badges, the status bar area in Teams' title
   bar color with light/dark following Teams' theme, a loading screen with
   automatic retry when Teams stalls, and a native error screen with Retry.
   Swipe from the left edge to go back from a chat. The page does not
@@ -201,8 +201,8 @@ Simulator; use a device.
   you tap the app button in the iOS call UI. The caller hears ringing until
   then; if they hang up first, the iOS call ends too. iOS also stops the
   camera for backgrounded apps.
-- **The Calendar does not load** in the embedded browser ("try the desktop
-  version"). Join meetings from the chat or the meeting link instead.
+- **Muting in a call may turn itself off again (known issue).** CallKit and
+  WebKit both act on the microphone's mute state; this is being worked on.
 - **No screen sharing.** `getDisplayMedia` is not available in `WKWebView` on
   iOS.
 - Microsoft can change Teams web at any time; if it starts rejecting this user
