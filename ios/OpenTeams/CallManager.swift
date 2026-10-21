@@ -38,6 +38,10 @@ final class CallManager: NSObject {
     private let notifications: NotificationBridge
     private var call: Call?
     private var muted = false
+    /// Answered in CallKit while the app was not in the foreground: Teams'
+    /// accept is clicked once the app is active (see `answer`).
+    private var acceptWhenActive = false
+    private var activeObserver: NSObjectProtocol?
 
     init(bridge: CallBridge, keepAlive: BackgroundKeepAlive, notifications: NotificationBridge) {
         let configuration = CXProviderConfiguration()
@@ -54,10 +58,43 @@ final class CallManager: NSObject {
         super.init()
         provider.setDelegate(self, queue: nil)
         bridge.delegate = self
+        activeObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.acceptIfPending() }
     }
 
     deinit {
+        if let activeObserver {
+            NotificationCenter.default.removeObserver(activeObserver)
+        }
         provider.invalidate()
+    }
+
+    /// WebKit does not start the microphone for a page that is not visible,
+    /// so accepting in Teams while the app is in the background (for example
+    /// when answering on the lock screen) connects the call without a
+    /// microphone, and Teams does not ask again. Accept right away when the
+    /// app is active; otherwise wait until the user brings the app forward
+    /// (the app button in the iOS call UI). The caller hears ringing until
+    /// then.
+    private func answer() {
+        if UIApplication.shared.applicationState == .active {
+            bridge.answer()
+        } else {
+            acceptWhenActive = true
+            Self.log("answered while in the background; accepting when the app is active")
+        }
+    }
+
+    private func acceptIfPending() {
+        guard acceptWhenActive, let call, call.phase == .answering else { return }
+        acceptWhenActive = false
+        // Give the page a moment to become visible before Teams asks for the
+        // microphone.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            Self.log("app active; accepting in Teams")
+            self?.bridge.answer()
+        }
     }
 
     private static func update(name: String, number: String) -> CXCallUpdate {
@@ -114,11 +151,18 @@ final class CallManager: NSObject {
     }
 
     private func incomingEnded() {
-        // While answering, the toast disappears because we clicked accept.
-        guard let call, call.phase == .ringing else { return }
-        Self.log("incoming call ended before it was answered here")
+        guard let call else { return }
+        // While answering, the toast disappears because we clicked accept,
+        // unless the accept is still waiting for the app to become active.
+        if call.phase == .answering && !acceptWhenActive { return }
+        guard call.phase != .active else { return }
+        Self.log("incoming call ended before it was accepted in Teams")
         provider.reportCall(with: call.uuid, endedAt: nil, reason: .remoteEnded)
         self.call = nil
+        if call.phase == .answering {
+            acceptWhenActive = false
+            releaseAudioSession()
+        }
     }
 
     private func connected() {
@@ -204,6 +248,7 @@ extension CallManager: CallBridgeDelegate {
 extension CallManager: CXProviderDelegate {
     func providerDidReset(_ provider: CXProvider) {
         call = nil
+        acceptWhenActive = false
         releaseAudioSession()
     }
 
@@ -217,20 +262,23 @@ extension CallManager: CXProviderDelegate {
         Self.log("answering")
         configureAudioSessionForCall()
         bridge.setRingtoneSuppressed(false)
-        bridge.answer()
+        answer()
         action.fulfill()
     }
 
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
         if let call, call.uuid == action.callUUID {
-            Self.log(call.phase == .ringing ? "declining" : "hanging up")
-            if call.phase == .ringing {
+            // Still ringing in Teams if the accept was waiting for the app.
+            let ringingInTeams = call.phase == .ringing || acceptWhenActive
+            Self.log(ringingInTeams ? "declining" : "hanging up")
+            if ringingInTeams {
                 bridge.decline()
             } else {
                 bridge.hangUp()
             }
             bridge.setRingtoneSuppressed(false)
             self.call = nil
+            acceptWhenActive = false
             releaseAudioSession()
         }
         action.fulfill()

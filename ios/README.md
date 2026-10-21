@@ -174,10 +174,12 @@ Simulator; use a device.
 - **Notifications need the app running.** They come from the Teams page
   itself, not a push service, so nothing arrives after the app is force-quit
   or killed by iOS (see above).
-- **Answering from the lock screen may need the app opened.** WebKit may not
-  start the microphone for a page in the background; if the other side cannot
-  hear you, tap the app button in the call UI to bring Open Teams forward.
-  iOS also stops the camera for backgrounded apps.
+- **Answering from the lock screen or in the background connects once you
+  open the app.** WebKit does not start the microphone for a page that is not
+  visible, so the app waits to accept in Teams until Open Teams is in the
+  foreground: tap the app button in the iOS call UI. The caller hears ringing
+  until then; if they hang up first, the iOS call ends too. iOS also stops the
+  camera for backgrounded apps.
 - **The Calendar does not load** in the embedded browser ("try the desktop
   version"). Join meetings from the chat or the meeting link instead.
 - **No screen sharing.** `getDisplayMedia` is not available in `WKWebView` on
