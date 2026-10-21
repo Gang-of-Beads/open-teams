@@ -11,6 +11,8 @@ final class TeamsViewController: UIViewController {
     private var lastAutomaticReload: Date?
     private let notificationBridge = NotificationBridge()
     private let keepAlive = BackgroundKeepAlive()
+    private let callBridge = CallBridge()
+    private var callManager: CallManager?
     private var cookiePathFixer: CookiePathFixer?
 
     override func viewDidLoad() {
@@ -21,10 +23,13 @@ final class TeamsViewController: UIViewController {
         cookiePathFixer = CookiePathFixer(store: configuration.websiteDataStore.httpCookieStore)
         notificationBridge.install(in: configuration.userContentController)
         keepAlive.install(in: configuration.userContentController)
+        callBridge.install(in: configuration.userContentController)
         webView = makeWebView(configuration: configuration)
         notificationBridge.webView = webView
         notificationBridge.requestAuthorization()
         keepAlive.start(webView: webView)
+        callBridge.webView = webView
+        callManager = CallManager(bridge: callBridge, keepAlive: keepAlive)
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
         NSLayoutConstraint.activate([

@@ -36,6 +36,10 @@ final class BackgroundKeepAlive {
     private weak var webView: WKWebView?
     private var observers: [NSObjectProtocol] = []
 
+    /// Set by CallManager while a call owns the audio session, so the
+    /// keep-alive does not switch it back to mixable playback mid-call.
+    var callInProgress = false
+
     func install(in contentController: WKUserContentController) {
         contentController.addUserScript(WKUserScript(
             source: Self.scriptSource,
@@ -83,7 +87,10 @@ final class BackgroundKeepAlive {
         observers.forEach(NotificationCenter.default.removeObserver)
     }
 
-    private func activateAudioSession() {
+    /// Puts the audio session back into mixable playback; CallManager calls
+    /// this when a call releases it.
+    func activateAudioSession() {
+        guard !callInProgress else { return }
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playback, options: [.mixWithOthers])
@@ -93,7 +100,7 @@ final class BackgroundKeepAlive {
         }
     }
 
-    private func resume() {
+    func resume() {
         webView?.evaluateJavaScript("window.__openTeamsKeepAlive?.resume(); undefined")
     }
 
