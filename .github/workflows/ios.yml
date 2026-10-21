@@ -51,6 +51,8 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      # Only the repository-owned local PageScripts package uses a plugin.
+      # Allow it to execute without an interactive Xcode trust prompt in CI.
       - name: Build unsigned Release app
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -58,6 +60,7 @@ jobs:
           xcodebuild build \
             -project ios/OpenTeams.xcodeproj \
             -scheme OpenTeams \
+            -skipPackagePluginValidation \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
