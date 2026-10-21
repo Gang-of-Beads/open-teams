@@ -50,7 +50,10 @@ final class CallManager: NSObject {
     private let keepAlive: BackgroundKeepAlive
     private let notifications: NotificationBridge
     private var call: Call?
+    /// The CallKit call's mute state.
     private var muted = false
+    /// Teams' mute state as last reported by the page.
+    private var teamsMuted: Bool?
     /// Answered in CallKit while the app was not in the foreground; Teams'
     /// accept waits until the app is active (see `answer`).
     private var acceptWhenActive = false
@@ -227,13 +230,16 @@ final class CallManager: NSObject {
     }
 
     private func mutedInTeams(_ isMuted: Bool) {
+        teamsMuted = isMuted
         guard let call, call.phase == .active, isMuted != muted else { return }
+        Self.log("Teams \(isMuted ? "muted" : "unmuted"); updating CallKit")
         muted = isMuted
         controller.request(CXTransaction(action: CXSetMutedCallAction(call: call.uuid, muted: isMuted))) { _ in }
     }
 
     private func callFinished() {
         muted = false
+        teamsMuted = nil
         acceptWhenActive = false
         // CallKit may have interrupted the keep-alive.
         keepAlive.activateAudioSession()
@@ -309,7 +315,15 @@ extension CallManager: CXProviderDelegate {
 
     func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
         muted = action.isMuted
-        bridge.setMuted(action.isMuted)
+        // Only a change made in the iOS call UI is applied to Teams. When the
+        // action matches Teams' state it is Teams' own change coming back
+        // from CallKit, and clicking would toggle the microphone again.
+        if action.isMuted != teamsMuted {
+            Self.log("iOS call UI \(action.isMuted ? "muted" : "unmuted"); applying to Teams")
+            bridge.setMuted(action.isMuted)
+        } else {
+            Self.log("CallKit mute matches Teams (\(action.isMuted ? "muted" : "unmuted")); nothing to do")
+        }
         action.fulfill()
     }
 
