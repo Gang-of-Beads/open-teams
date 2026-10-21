@@ -122,7 +122,11 @@ jobs:
           notes=$(cat <<EOF
           Experimental Android build of Open Teams (native shell around Teams web).
 
-          **Not the desktop app.** Released for phones where the official Teams app cannot sign in without Intune: a tenant policy that requires a managed, registered device. Calls go through Android Telecom, and notifications are native.
+          Calls use Android Telecom; message and incoming-call notifications are native. Access remains subject to your organization's policies.
+
+          Incoming-call detection now falls back to visible call controls if Teams' internal events fail. Audio routing lists available devices and reports switching failures.
+
+          **No offline push:** notifications and calls require the WebView to remain connected. Killing or force-stopping the app prevents new events from arriving. Background battery behavior is unchanged.
 
           Requires Android 10 or later. Signed with the committed release key, so it installs over earlier releases.
 

@@ -144,7 +144,7 @@ object TeamsWeb {
     }
 
     private fun create(context: Context): WebView {
-        WebView.setWebContentsDebuggingEnabled(true) // release too: no laptop debugging otherwise
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         val view = WebView(context)
         view.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
         view.webViewClient = Client()

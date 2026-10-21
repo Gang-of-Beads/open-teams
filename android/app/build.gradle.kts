@@ -24,8 +24,8 @@ android {
         minSdk = 29
         targetSdk = 36
         // CI overrides both from the release tag.
-        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 2
-        versionName = project.findProperty("versionName") as String? ?: "0.2.0"
+        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 400
+        versionName = project.findProperty("versionName") as String? ?: "0.4.0"
     }
 
     signingConfigs {
