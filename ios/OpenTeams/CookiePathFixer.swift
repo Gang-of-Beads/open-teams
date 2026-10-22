@@ -15,34 +15,25 @@ import WebKit
 /// Whenever the cookie store changes, each Teams cookie with a relative path
 /// is copied to `Path=/` with the same value, flags and expiry. The original is
 /// left alone so Teams can keep refreshing it; the copy follows each refresh.
-final class CookiePathFixer: NSObject {
+final class CookiePathFixer {
     private let store: WKHTTPCookieStore
 
+    /// Fed by CookieStoreMonitor, which reads the store once per change.
     init(store: WKHTTPCookieStore) {
         self.store = store
-        super.init()
-        store.add(self)
-        repair()
     }
 
-    deinit {
-        store.remove(self)
-    }
-
-    private func repair() {
-        store.getAllCookies { [weak self] cookies in
-            guard let self else { return }
-            let existing = Set(cookies.map(Self.key))
-            for cookie in cookies {
-                guard !cookie.path.hasPrefix("/"),
-                      Self.isTeamsDomain(cookie.domain),
-                      let fixed = Self.copy(cookie, path: "/"),
-                      !existing.contains(Self.key(fixed))
-                else { continue }
-                // Setting it changes the store again; the key check above stops
-                // the observer from copying the same cookie twice.
-                self.store.setCookie(fixed)
-            }
+    func repair(_ cookies: [HTTPCookie]) {
+        let existing = Set(cookies.map(Self.key))
+        for cookie in cookies {
+            guard !cookie.path.hasPrefix("/"),
+                  Self.isTeamsDomain(cookie.domain),
+                  let fixed = Self.copy(cookie, path: "/"),
+                  !existing.contains(Self.key(fixed))
+            else { continue }
+            // Setting it changes the store again; the key check above stops
+            // the next pass from copying the same cookie twice.
+            store.setCookie(fixed)
         }
     }
 
@@ -60,11 +51,5 @@ final class CookiePathFixer: NSObject {
         guard var properties = cookie.properties else { return nil }
         properties[.path] = path
         return HTTPCookie(properties: properties)
-    }
-}
-
-extension CookiePathFixer: WKHTTPCookieStoreObserver {
-    func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
-        repair()
     }
 }

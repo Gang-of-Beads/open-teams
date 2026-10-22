@@ -100,12 +100,13 @@
         performance.now() - current.started > 500 ||
         current.target.closest?.("input, textarea, select, [contenteditable]")) return;
     setTimeout(() => {
-      if (current.clicked || tap !== current) return;
-      const element = current.target.isConnected ? current.target : document.elementFromPoint(current.x, current.y);
-      if (!element) return;
+      // Only the element that was actually tapped. If Teams re-rendered it
+      // meanwhile, do nothing: whatever is at that point now (another row, a
+      // banner that just appeared) is not what the user touched.
+      if (current.clicked || tap !== current || !current.target.isConnected) return;
       current.synthesized = true;
       // SVG icons have no click(); a bubbling click reaches Teams' handlers.
-      element.dispatchEvent(new MouseEvent("click", {
+      current.target.dispatchEvent(new MouseEvent("click", {
         bubbles: true, cancelable: true, composed: true, view: window,
         clientX: current.x, clientY: current.y, detail: 1,
       }));
@@ -303,8 +304,10 @@
       if (performance.now() - started < 900) {
         setTimeout(attempt, 50);
       } else {
-        // Leave the original app bar available; do not silently select a tab
-        // whose command was never dispatched.
+        // Do not silently select a tab whose command was never dispatched,
+        // and close the app bar this attempt opened (the button toggles it)
+        // instead of leaving it over the page.
+        if (expanded) click(appBarButton());
         post({ type: "navigationResult", tab, dispatched: false });
         lastState = "";
         report();

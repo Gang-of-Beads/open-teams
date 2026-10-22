@@ -23,7 +23,7 @@ final class TeamsViewController: UIViewController {
     private let sessionMaintenance = SessionMaintenance()
     private let shellBridge = ShellBridge()
     private var callManager: CallManager?
-    private var cookiePathFixer: CookiePathFixer?
+    private var cookieMonitor: CookieStoreMonitor?
     private var sessionCookies: SessionCookiePersistence?
     private var cookieFilter: ThirdPartyCookieFilter?
     private var authAlertShown = false
@@ -63,9 +63,11 @@ final class TeamsViewController: UIViewController {
         // keeps "always" to Microsoft hosts and sites opened as pages.
         HTTPCookieStorage.shared.cookieAcceptPolicy = .always
         let configuration = Self.makeConfiguration()
-        cookiePathFixer = CookiePathFixer(store: configuration.websiteDataStore.httpCookieStore)
-        sessionCookies = SessionCookiePersistence(store: configuration.websiteDataStore.httpCookieStore)
-        cookieFilter = ThirdPartyCookieFilter(store: configuration.websiteDataStore.httpCookieStore)
+        let cookieStore = configuration.websiteDataStore.httpCookieStore
+        sessionCookies = SessionCookiePersistence(store: cookieStore)
+        let filter = ThirdPartyCookieFilter(store: cookieStore)
+        cookieFilter = filter
+        cookieMonitor = CookieStoreMonitor(store: cookieStore, filter: filter, pathFixer: CookiePathFixer(store: cookieStore))
         let controller = configuration.userContentController
         if Self.scriptEnabled("notifications") { notificationBridge.install(in: controller) }
         if Self.scriptEnabled("keepalive") { keepAlive.install(in: controller) }
@@ -607,7 +609,18 @@ extension TeamsViewController: ShellBridgeDelegate {
     /// "Allow Cross-Website Tracking" (NSCrossWebsiteTrackingUsageDescription)
     /// lifts that for this app. Explain once per launch and open Settings.
     func shellBridgeAuthRequired(_ bridge: ShellBridge) {
-        guard !authAlertShown, presentedViewController == nil else { return }
+        guard !authAlertShown else { return }
+        // The page reports the banner once per load, so never drop it: show
+        // it above any open sheet or popup, and retry while one is still
+        // animating in or out.
+        let top = presenter
+        if top.isBeingPresented || top.isBeingDismissed || top is UIAlertController {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self else { return }
+                self.shellBridgeAuthRequired(bridge)
+            }
+            return
+        }
         authAlertShown = true
         print("[SESSION] Teams requires sign-in; offering cross-website tracking setting")
         let alert = UIAlertController(

@@ -205,7 +205,8 @@ Teams calls are mirrored into CallKit, so they behave like phone calls:
   screen, following the ring/silent switch and Focus. Teams' own ringtone is
   silenced while iOS rings. Answer and Decline click Teams' own buttons; if
   the caller hangs up or you answer on another device, the iOS call UI goes
-  away.
+  away. Answering with Teams' own toast while iOS rings is reported to
+  CallKit as an answer, so the system UI switches to the connected call.
 - **Calls and meetings you start or join in Teams** show as an ongoing call:
   status bar / Dynamic Island indicator, Recents, and a cellular call
   interrupts it properly.
@@ -289,7 +290,8 @@ log. Details and figures are in the commit history.
   custom emoji showed a placeholder (HTTP 401). The app accepts cookies
   always and `ThirdPartyCookieFilter` deletes, as soon as WebKit reports them,
   cookies of any domain that is neither a trusted Microsoft host nor a site
-  opened as a page (for example a federated sign-in provider). iOS has no
+  opened as a page in the last 30 days (for example a federated sign-in
+  provider; at most 50 are remembered). iOS has no
   per-domain policy; a filtered cookie exists only until the store observer
   runs.
 - **Web process memory.** Teams' web process sits near the per-process limit
@@ -379,6 +381,7 @@ The existing `npm run lint` now also checks the standalone script files.
 | `OpenTeams/CookiePathFixer.swift` | Copies Teams cookies with a relative path to `/` so profile pictures load |
 | `OpenTeams/SessionCookiePersistence.swift` | Saves Microsoft session cookies to the Keychain and restores them at launch |
 | `OpenTeams/ThirdPartyCookieFilter.swift` | Keeps cookies only for Microsoft hosts and sites opened as pages |
+| `OpenTeams/CookieStoreMonitor.swift` | Single cookie store observer: one read per change burst for the filter and path fixer |
 | `OpenTeams/BackgroundKeepAlive.swift` | Inaudible MediaStream tone that keeps the page running in the background without a Now Playing entry |
 | `Config/Info.plist` | Keys build settings cannot generate (`UIBackgroundModes`) |
 | `Config/Signing.xcconfig` | Signing defaults, includes the optional `Local.xcconfig` |

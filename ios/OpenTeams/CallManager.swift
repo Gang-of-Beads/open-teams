@@ -170,10 +170,20 @@ final class CallManager: NSObject {
     private func connected() {
         keepAlive.callInProgress = true
         if var call {
+            let answeredInTeams = call.phase == .ringing
             call.phase = .active
             self.call = call
             answerPending = false
             Self.log("call connected")
+            if answeredInTeams {
+                // Answered with Teams' own toast while CallKit was ringing:
+                // tell CallKit, or the system UI keeps ringing. The answer
+                // action is fulfilled without clicking Teams' accept again.
+                Self.log("answered in Teams; reporting the answer to CallKit")
+                controller.request(CXTransaction(action: CXAnswerCallAction(call: call.uuid))) { error in
+                    if let error { Self.log("answer not reported to CallKit: \(error.localizedDescription)") }
+                }
+            }
             return
         }
         // Placed or joined from Teams, or answered and handed over to Teams.
@@ -256,6 +266,12 @@ extension CallManager: CXProviderDelegate {
     func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
         guard var call, call.uuid == action.callUUID else {
             action.fail()
+            return
+        }
+        if call.phase == .active {
+            // Already answered in Teams (see connected()).
+            bridge.setRingtoneSuppressed(false)
+            action.fulfill()
             return
         }
         call.phase = .answering
