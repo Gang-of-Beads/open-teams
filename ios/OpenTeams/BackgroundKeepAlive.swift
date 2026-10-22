@@ -168,7 +168,7 @@ final class BackgroundKeepAlive: NSObject {
     }
 
     /// Injected at document end in the main frame of every page load.
-    static let scriptSource = BundledScript.backgroundKeepAlive.source
+    static var scriptSource: String { PageScriptOptions.scoped(BundledScript.backgroundKeepAlive.source) }
 }
 
 extension BackgroundKeepAlive: WKScriptMessageHandler {

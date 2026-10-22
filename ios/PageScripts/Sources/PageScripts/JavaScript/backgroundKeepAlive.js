@@ -1,3 +1,4 @@
+/* global OPEN_TEAMS_OPTIONS */
 (() => {
   // Popups (sign-in, consent) share the scripts but do not need it.
   if (window.__openTeamsKeepAlive || window.opener) return;
@@ -8,12 +9,28 @@
   let element = null;
 
   const build = () => {
-    context = new AudioContextClass();
+    // The tone only has to exist, not sound good: mono at 8 kHz is ~12x less
+    // sample data than the default 48 kHz stereo graph that WebKit renders
+    // and buffers for the MediaStream (measured: ~390 MB footprint with the
+    // default graph). The 30 Hz tone is still far below 4 kHz Nyquist.
+    const legacy = typeof OPEN_TEAMS_OPTIONS === "object" && OPEN_TEAMS_OPTIONS.legacyKeepAlive;
+    try {
+      context = legacy ? new AudioContextClass() : new AudioContextClass({ sampleRate: 8000 });
+    } catch {
+      context = new AudioContextClass();
+    }
     const oscillator = context.createOscillator();
     oscillator.frequency.value = 30;
+    oscillator.channelCount = 1;
     const gain = context.createGain();
     gain.gain.value = 0.0001; // -80 dBFS
     const destination = context.createMediaStreamDestination();
+    if (!legacy) {
+      gain.channelCount = 1;
+      gain.channelCountMode = "explicit";
+      destination.channelCount = 1;
+      destination.channelCountMode = "explicit";
+    }
     oscillator.connect(gain);
     gain.connect(destination);
     oscillator.start();

@@ -1,4 +1,4 @@
-/* global OPEN_TEAMS_APPS */
+/* global OPEN_TEAMS_APPS, OPEN_TEAMS_OPTIONS */
 
 (() => {
   const handler = window.webkit?.messageHandlers?.openTeamsShell;
@@ -191,7 +191,37 @@
   };
 
   let lastState = "";
+  // After a cold load Teams' narrow layout reopens the last conversation
+  // instead of the list. Return to the list once, unless the conversation
+  // was opened on purpose: a notification tap, or any touch before it.
+  const loadedAt = performance.now();
+  let startListPending = true;
+  document.addEventListener("openteams:notification-open", () => { startListPending = false; });
+  addEventListener("pointerdown", (event) => { if (event.isTrusted) startListPending = false; }, true);
+  const returnToListAfterLoad = () => {
+    if (!startListPending) return;
+    if (performance.now() - loadedAt > 20000) { startListPending = false; return; }
+    const back = document.querySelector('[data-tid="layout-navigation-controls"]');
+    if (selectedApp() === "chat" && back && visible(back)) {
+      startListPending = false;
+      back.click();
+    }
+  };
+
+  // Teams' "We need you to sign in again" banner (verified data-tid). Its
+  // Sign in button retries silent renewal in a hidden login frame, which
+  // fails while WebKit blocks that frame's cookies; the native side
+  // explains how to allow it.
+  let authReported = false;
+  const reportAuthBanner = () => {
+    if (authReported || !document.querySelector('[data-tid^="banner-notification-action-auth-banner"]')) return;
+    authReported = true;
+    post({ type: "authRequired" });
+  };
+
   const report = () => {
+    returnToListAfterLoad();
+    reportAuthBanner();
     const entries = Object.entries(OPEN_TEAMS_APPS);
     shellReady ||= entries.some(([, id]) => document.getElementById(id)) ||
       Boolean(document.querySelector('[data-tid="me-control-avatar-trigger"], [data-testid="me-control-avatar-trigger"]'));
@@ -215,19 +245,28 @@
 
   let navigationGeneration = 0;
 
-  // Coalesce Teams' frequent DOM changes into one report.
-  let scheduled = false;
-  const schedule = () => {
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(() => { scheduled = false; report(); }, 250);
-  };
-  new MutationObserver(schedule).observe(document.documentElement, {
-    subtree: true, childList: true, characterData: true,
-    // Do not observe style/class: Teams animates them every frame, and each
-    // record would schedule layout-reading work during the animation.
-    attributes: true, attributeFilter: ["aria-pressed", "content"],
-  });
+  // Measured on device (WebContent physical footprint): observing the whole
+  // document (subtree, childList, characterData) cost ~370 MB, because Teams
+  // mutates the DOM constantly and every burst ran a layout-reading report.
+  // The reported state changes rarely, so poll a few elements instead while
+  // the page is visible, and report at once on visibility changes and
+  // native actions. Nothing runs while the page is hidden.
+  if ((typeof OPEN_TEAMS_OPTIONS === "object" && OPEN_TEAMS_OPTIONS.legacyShell)) {
+    let scheduled = false;
+    new MutationObserver(() => {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(() => { scheduled = false; report(); }, 250);
+    }).observe(document.documentElement, {
+      subtree: true, childList: true, characterData: true,
+      attributes: true, attributeFilter: ["aria-pressed", "content"],
+    });
+  } else {
+    setInterval(() => { if (document.visibilityState === "visible") report(); }, 500);
+    document.addEventListener("visibilitychange", report);
+    // A tap inside Teams (opening a chat, going back) shows up promptly.
+    document.addEventListener("click", () => setTimeout(report, 150), true);
+  }
   report();
 
   const click = (element) => {
