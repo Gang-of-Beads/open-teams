@@ -27,6 +27,8 @@ struct ShellState: Equatable {
 
 protocol ShellBridgeDelegate: AnyObject {
     func shellBridge(_ bridge: ShellBridge, didUpdate state: ShellState)
+    /// Teams shows its "sign in again" banner.
+    func shellBridgeAuthRequired(_ bridge: ShellBridge)
 }
 
 /// Connects the native shell (tab bar, swipe back, status bar color, loading
@@ -142,6 +144,10 @@ extension ShellBridge: WKScriptMessageHandler {
             return
         }
         #endif
+        if payload["type"] as? String == "authRequired" {
+            delegate?.shellBridgeAuthRequired(self)
+            return
+        }
         guard payload["type"] as? String == "state" else { return }
 
         var next = ShellState()
@@ -176,7 +182,7 @@ extension ShellBridge {
     /// which Teams' global error handler treats as a failed app init
     /// ("Oops, app failed to init") and then reloads the page.
     private static func scoped(_ source: String) -> String {
-        "{\nconst OPEN_TEAMS_APPS = Object.freeze({\(appsLiteral)});\n" + source + "\n}\n"
+        PageScriptOptions.scoped(source, prefix: "const OPEN_TEAMS_APPS = Object.freeze({\(appsLiteral)});\n")
     }
 
     static var scriptSource: String { scoped(pageScript) }

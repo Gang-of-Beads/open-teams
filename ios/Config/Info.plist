@@ -10,9 +10,17 @@
   - voip is required for CXProvider.reportNewIncomingCall from the
     background: without it iOS rejects the report (com.apple.CallKit.error 0)
     and no call UI appears (see CallManager.swift). No PushKit is used.
+
+  NSCrossWebsiteTrackingUsageDescription adds "Allow Cross-Website Tracking"
+  under Settings > Open Teams. When enabled, iOS turns off tracking
+  prevention for the app's web views, so Teams' hidden-frame renewal on
+  login.microsoftonline.com can use the Microsoft sign-in cookie (otherwise a
+  blocked third-party cookie: interaction_required, "sign in again").
 -->
 <plist version="1.0">
 <dict>
+	<key>NSCrossWebsiteTrackingUsageDescription</key>
+	<string>Lets Microsoft sign-in renew your Teams session in the background, as a desktop browser does, instead of asking you to sign in again.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

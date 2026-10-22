@@ -1,3 +1,4 @@
+import Foundation
 import PageScripts
 
 /// Typed access to JavaScript embedded in the executable at build time.
@@ -24,5 +25,24 @@ enum BundledScript: String {
         case .shell: return EmbeddedScripts.shell
         case .viewport: return EmbeddedScripts.viewport
         }
+    }
+}
+
+/// Options passed into page scripts as a block-scoped constant. Debug builds
+/// can select the previous shell/keep-alive implementations for memory
+/// comparisons: launch with `-OTLegacy shell,keepalive`.
+enum PageScriptOptions {
+    static var literal: String {
+        var legacy: [Substring] = []
+        #if DEBUG
+        legacy = (UserDefaults.standard.string(forKey: "OTLegacy") ?? "").split(separator: ",")
+        if !legacy.isEmpty { print("[DEBUG] legacy page scripts: \(legacy.joined(separator: ","))") }
+        #endif
+        return "Object.freeze({ legacyShell: \(legacy.contains("shell")), legacyKeepAlive: \(legacy.contains("keepalive")) })"
+    }
+
+    /// Wraps a script in a block with the options constant in scope.
+    static func scoped(_ source: String, prefix: String = "") -> String {
+        "{\nconst OPEN_TEAMS_OPTIONS = \(literal);\n\(prefix)" + source + "\n}\n"
     }
 }
