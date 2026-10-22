@@ -32,11 +32,15 @@ import WebKit
 ///
 /// The audio session is mixable, so the tone never pauses music or podcasts
 /// from other apps. The cost is battery: Teams keeps running.
-final class BackgroundKeepAlive {
+final class BackgroundKeepAlive: NSObject {
+    static let handlerName = "openTeamsKeepAlive"
     private weak var webView: WKWebView?
     private var observers: [NSObjectProtocol] = []
     /// Do not reconfigure the host session during WebKit/CallKit capture.
     var callInProgress = false
+    private var lastBeat: Date?
+    private static let lastBeatKey = "KeepAlive.lastBeat"
+    private static let lastStateKey = "KeepAlive.lastAppState"
 
     func install(in contentController: WKUserContentController) {
         contentController.addUserScript(WKUserScript(
@@ -44,10 +48,35 @@ final class BackgroundKeepAlive {
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         ))
+        contentController.add(WeakScriptMessageHandler(self), name: Self.handlerName)
+    }
+
+    /// Timestamped, content-free keep-alive evidence (state names only).
+    static func log(_ message: String) {
+        let time = Date().formatted(.iso8601.time(includingFractionalSeconds: false))
+        print("[KEEPALIVE] \(time) \(message)")
+    }
+
+    private static func name(_ state: UIApplication.State) -> String {
+        switch state {
+        case .active: return "active"
+        case .inactive: return "inactive"
+        case .background: return "background"
+        @unknown default: return "unknown"
+        }
     }
 
     func start(webView: WKWebView) {
         self.webView = webView
+        // Distinguishes a cold start after iOS killed the whole app from a
+        // web process reload ([NAV] web content process terminated).
+        let defaults = UserDefaults.standard
+        if let previous = defaults.object(forKey: Self.lastBeatKey) as? Date {
+            Self.log("launch; previous session's last heartbeat \(Int(Date().timeIntervalSince(previous)))s ago " +
+                     "while \(defaults.string(forKey: Self.lastStateKey) ?? "unknown")")
+        } else {
+            Self.log("launch; no previous heartbeat")
+        }
         activateAudioSession()
 
         let center = NotificationCenter.default
@@ -60,22 +89,41 @@ final class BackgroundKeepAlive {
         ]
         for name in resumeOn {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Self.log("\(name.rawValue.replacingOccurrences(of: "UIApplication", with: ""))")
+                UserDefaults.standard.set(Self.name(UIApplication.shared.applicationState), forKey: Self.lastStateKey)
                 self?.resume()
             })
         }
         observers.append(center.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] notification in
-            let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let info = notification.userInfo
+            let rawType = info?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let options = AVAudioSession.InterruptionOptions(rawValue: info?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
+            let reason = (info?[AVAudioSessionInterruptionReasonKey] as? UInt).map(String.init) ?? "-"
+            Self.log("audio interruption \(rawType == AVAudioSession.InterruptionType.began.rawValue ? "began" : "ended") " +
+                     "shouldResume=\(options.contains(.shouldResume)) reason=\(reason) call=\(self?.callInProgress ?? false)")
             if rawType == AVAudioSession.InterruptionType.ended.rawValue {
                 self?.activateAudioSession()
                 self?.resume()
             }
         })
+        observers.append(center.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { notification in
+            let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+            Self.log("audio route change reason=\(reason)")
+        })
+        observers.append(center.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
+        ) { _ in
+            Self.log("memory warning app=\(Self.name(UIApplication.shared.applicationState))")
+        })
         // The media server can restart (rare); the session must be set up again.
         observers.append(center.addObserver(
             forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main
         ) { [weak self] _ in
+            Self.log("media services reset")
             self?.activateAudioSession()
             self?.resume()
         })
@@ -102,6 +150,34 @@ final class BackgroundKeepAlive {
         webView?.evaluateJavaScript("window.__openTeamsKeepAlive?.resume(); undefined")
     }
 
+    /// Records page heartbeats; logs gaps that indicate a suspended page.
+    private func heartbeat(_ payload: [String: Any]) {
+        let now = Date()
+        let state = Self.name(UIApplication.shared.applicationState)
+        if let lastBeat, now.timeIntervalSince(lastBeat) > 40 {
+            Self.log("heartbeat gap \(Int(now.timeIntervalSince(lastBeat)))s app=\(state)")
+        }
+        let context = payload["context"] as? String ?? "?"
+        let paused = payload["paused"] as? Bool ?? true
+        if context != "running" || paused {
+            Self.log("heartbeat audio context=\(context) paused=\(paused) app=\(state)")
+        }
+        lastBeat = now
+        UserDefaults.standard.set(now, forKey: Self.lastBeatKey)
+        UserDefaults.standard.set(state, forKey: Self.lastStateKey)
+    }
+
     /// Injected at document end in the main frame of every page load.
     static let scriptSource = BundledScript.backgroundKeepAlive.source
+}
+
+extension BackgroundKeepAlive: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        let origin = message.frameInfo.securityOrigin
+        guard message.frameInfo.isMainFrame,
+              TeamsConfig.isTrusted(URL(string: "\(origin.protocol)://\(origin.host)")),
+              let payload = message.body as? [String: Any]
+        else { return }
+        heartbeat(payload)
+    }
 }

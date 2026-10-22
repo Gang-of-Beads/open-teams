@@ -199,7 +199,10 @@
     const active = pendingDestination && performance.now() < pendingDestination.until
       ? pendingDestination.tab : currentPage();
     const badges = Object.fromEntries(entries.map(([tab, id]) => {
-      if (document.getElementById("readerBox-" + id)) lastBadges[tab] = unread(id);
+      // A mounted tile without a count element has no unread items: Teams
+      // can remove readerBox-<id> when the count drops to 0. Only a tile
+      // that is absent entirely (app bar unmounted) keeps the last count.
+      if (document.getElementById(id)) lastBadges[tab] = unread(id);
       return [tab, lastBadges[tab] || 0];
     }));
     const back = Boolean(document.querySelector('[data-tid="layout-navigation-controls"]'));
@@ -274,10 +277,13 @@
 
   let lastUnread = null;
   let focusGeneration = 0;
-  const unreadMarker = (row) => row.matches('[data-is-unread="true"], [data-unread="true"]') ||
-    Boolean(row.querySelector('[data-is-unread="true"], [data-unread="true"], ' +
-      '[data-testid="unread-indicator"], [data-testid="unread-icon"], ' +
-      '[data-tid="unread-indicator"], [data-tid="unread-badge"]'));
+  // Verified on device: Teams marks an unread chat/channel row only for
+  // screen readers. Its aria-labelledby references a shared hidden label
+  // (chat_list_unread_text, simple_collab_voiceover_unread_message,
+  // channel-list-unread-text). The ids are locale-independent; no text,
+  // bold styling or hashed class names are used.
+  const unreadMarker = (row) => (row.getAttribute("aria-labelledby") || "").split(/\s+/)
+    .some((id) => id && /unread/i.test(id) && document.getElementById(id));
   const scrollContainer = (element) => {
     for (let parent = element; parent && parent !== document.body; parent = parent.parentElement) {
       if (/(auto|scroll|overlay)/.test(getComputedStyle(parent).overflowY) &&
@@ -286,14 +292,17 @@
     return null;
   };
   const nextUnreadOrTop = (tree) => {
+    // Conversations only (chats and channels): not section headers, Quick
+    // views (data-item-type=slice) or Copilot.
     const rows = [...tree.querySelectorAll('[role="treeitem"]')].filter((row) =>
-      visible(row) && !row.querySelector('[role="treeitem"]') &&
-      !row.hasAttribute("aria-expanded") && !row.matches('[data-testid^="sc-channel-list-item-"]')
+      visible(row) && !row.querySelector('[role="treeitem"]') && !row.hasAttribute("aria-expanded") &&
+      row.getAttribute("data-item-type") !== "slice" && !row.matches('[data-testid^="list-item-metaos"]')
     );
     const scroller = scrollContainer(rows[0] || tree);
     if (!scroller) return false;
     const candidates = rows.filter(unreadMarker);
-    const key = (row) => row.getAttribute("data-chat-id") || row.getAttribute("data-itemid") || row.id || row;
+    // Stable conversation key; element ids are regenerated on re-render.
+    const key = (row) => row.getAttribute("data-fui-tree-item-value") || row.id || row;
     const previous = candidates.findIndex((row) => key(row) === lastUnread);
     const row = candidates.length ? candidates[(previous + 1) % candidates.length] : null;
     if (!row) {
@@ -326,7 +335,10 @@
           returned = true;
           click(back);
         } else {
-          const tree = [...document.querySelectorAll('[role="tree"]')].find(visible);
+          // The chat list lives in the mid-nav pane; never pick a tree from
+          // another app that is still mounted (Activity's list).
+          const pane = document.querySelector('[data-tid="app-layout-area--mid-nav"]') || document;
+          const tree = [...pane.querySelectorAll('[role="tree"]')].find(visible);
           if (tree && nextUnreadOrTop(tree)) return;
         }
       }

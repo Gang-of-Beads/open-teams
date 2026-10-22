@@ -35,9 +35,21 @@
     if (element.paused) element.play().catch(() => { /* retried later */ });
   };
 
+  // Heartbeat for the native side: a gap between beats means the page was
+  // suspended. Audio state only; no page content.
+  const beat = () => {
+    try {
+      window.webkit?.messageHandlers?.openTeamsKeepAlive?.postMessage({
+        context: context?.state || "none", paused: element ? element.paused : true,
+        visibility: document.visibilityState,
+      });
+    } catch { /* bridge unavailable */ }
+  };
+
   Object.defineProperty(window, "__openTeamsKeepAlive", { value: Object.freeze({ resume }) });
   document.addEventListener("visibilitychange", resume);
   // Watchdog for pauses that raise no event; a no-op while playing.
-  setInterval(resume, 15000);
+  setInterval(() => { resume(); beat(); }, 15000);
   resume();
+  beat();
 })();

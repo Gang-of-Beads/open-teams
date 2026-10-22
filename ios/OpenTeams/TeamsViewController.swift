@@ -396,6 +396,7 @@ extension TeamsViewController: WKNavigationDelegate {
         // rather than leaving a blank screen.
         if webView === self.webView {
             print("[NAV] web content process terminated app=\(UIApplication.shared.applicationState.rawValue)")
+            BackgroundKeepAlive.log("web content process terminated; reloading")
             keepAlive.callInProgress = false
             UIApplication.shared.isIdleTimerDisabled = false
             // Reload once automatically; if the process keeps dying, ask the
