@@ -21,6 +21,9 @@ import WebKit
 final class SessionCookiePersistence {
     private let store: WKHTTPCookieStore
     private var observers: [NSObjectProtocol] = []
+    /// Saving before the restore completes would replace the saved session
+    /// with the still-empty store.
+    private var restored = false
     private static let service = "io.github.openteams.session-cookies"
     private static let account = "microsoft"
     private static let maxAge: TimeInterval = 14 * 24 * 3600
@@ -43,6 +46,7 @@ final class SessionCookiePersistence {
     /// queue. Cookies already in the store (same name, domain and path) win.
     func restore(completion: @escaping () -> Void) {
         guard let saved = Self.load() else {
+            restored = true
             completion()
             return
         }
@@ -54,8 +58,9 @@ final class SessionCookiePersistence {
                 group.enter()
                 store.setCookie(cookie) { group.leave() }
             }
-            group.notify(queue: .main) {
+            group.notify(queue: .main) { [weak self] in
                 print("[SESSION] Restored \(cookies.count) session cookies")
+                self?.restored = true
                 completion()
             }
         }
@@ -63,6 +68,7 @@ final class SessionCookiePersistence {
 
     /// Saves the current session cookies of trusted Microsoft hosts.
     func save() {
+        guard restored else { return }
         // Keep the app alive long enough to finish when it is backgrounding.
         var task = UIBackgroundTaskIdentifier.invalid
         task = UIApplication.shared.beginBackgroundTask(withName: "SaveSessionCookies") {
@@ -78,9 +84,15 @@ final class SessionCookiePersistence {
                 if let policy = cookie.sameSitePolicy { record["sameSite"] = policy.rawValue }
                 return record
             }
-            let payload: [String: Any] = ["savedAt": Date().timeIntervalSince1970, "cookies": records]
-            if let data = try? JSONSerialization.data(withJSONObject: payload) {
-                Self.write(data)
+            if records.isEmpty {
+                // Signed out (or never signed in): an old session must not
+                // come back on the next launch.
+                SecItemDelete(Self.query as CFDictionary)
+            } else {
+                let payload: [String: Any] = ["savedAt": Date().timeIntervalSince1970, "cookies": records]
+                if let data = try? JSONSerialization.data(withJSONObject: payload) {
+                    Self.write(data)
+                }
             }
             UIApplication.shared.endBackgroundTask(task)
         }

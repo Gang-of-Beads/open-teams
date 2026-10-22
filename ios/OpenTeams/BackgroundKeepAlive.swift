@@ -39,6 +39,7 @@ final class BackgroundKeepAlive: NSObject {
     /// Do not reconfigure the host session during WebKit/CallKit capture.
     var callInProgress = false
     private var lastBeat: Date?
+    private var lastPersistedBeat = Date.distantPast
     private static let lastBeatKey = "KeepAlive.lastBeat"
     private static let lastStateKey = "KeepAlive.lastAppState"
 
@@ -163,8 +164,14 @@ final class BackgroundKeepAlive: NSObject {
             Self.log("heartbeat audio context=\(context) paused=\(paused) app=\(state)")
         }
         lastBeat = now
-        UserDefaults.standard.set(now, forKey: Self.lastBeatKey)
-        UserDefaults.standard.set(state, forKey: Self.lastStateKey)
+        // Persisted for the next launch's "how did the last session end"
+        // line; once a minute is precise enough and avoids a disk write every
+        // 15 seconds, also in the background.
+        if now.timeIntervalSince(lastPersistedBeat) >= 60 {
+            lastPersistedBeat = now
+            UserDefaults.standard.set(now, forKey: Self.lastBeatKey)
+            UserDefaults.standard.set(state, forKey: Self.lastStateKey)
+        }
     }
 
     /// Injected at document end in the main frame of every page load.
