@@ -24,6 +24,12 @@ final class TeamsViewController: UIViewController {
     private let shellBridge = ShellBridge()
     private var callManager: CallManager?
     private var cookiePathFixer: CookiePathFixer?
+    private var sessionCookies: SessionCookiePersistence?
+    private var cookieFilter: ThirdPartyCookieFilter?
+    private var authAlertShown = false
+    /// Set when Settings was opened for sign-in; retry renewal on return.
+    private var reloadAfterSettings = false
+    private var settingsObserver: NSObjectProtocol?
 
     private let tabBar = UITabBar()
     private var lastChatTap: TimeInterval?
@@ -47,13 +53,25 @@ final class TeamsViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
 
+        // Teams authenticates its media gateway (custom emoji, images:
+        // *.asyncgw.teams.microsoft.com) by having that host set its own
+        // cookie from a cross-site request. The default app policy,
+        // onlyFromMainDocumentDomain, rejects cookies from hosts never visited
+        // top-level, so every media image got 401 (verified on device).
+        // WebKit reads this policy when it starts its network process, so it
+        // must be set before the first web view exists. ThirdPartyCookieFilter
+        // keeps "always" to Microsoft hosts and sites opened as pages.
+        HTTPCookieStorage.shared.cookieAcceptPolicy = .always
         let configuration = Self.makeConfiguration()
         cookiePathFixer = CookiePathFixer(store: configuration.websiteDataStore.httpCookieStore)
-        notificationBridge.install(in: configuration.userContentController)
-        keepAlive.install(in: configuration.userContentController)
-        mediaBridge.install(in: configuration.userContentController)
-        callBridge.install(in: configuration.userContentController)
-        shellBridge.install(in: configuration.userContentController)
+        sessionCookies = SessionCookiePersistence(store: configuration.websiteDataStore.httpCookieStore)
+        cookieFilter = ThirdPartyCookieFilter(store: configuration.websiteDataStore.httpCookieStore)
+        let controller = configuration.userContentController
+        if Self.scriptEnabled("notifications") { notificationBridge.install(in: controller) }
+        if Self.scriptEnabled("keepalive") { keepAlive.install(in: controller) }
+        if Self.scriptEnabled("media") { mediaBridge.install(in: controller) }
+        if Self.scriptEnabled("calls") { callBridge.install(in: controller) }
+        if Self.scriptEnabled("shell") { shellBridge.install(in: controller) }
         webView = makeWebView(configuration: configuration)
         // The outer page does not scroll; Teams scrolls its own panes. Without
         // this the whole app rubber-bands like a web page.
@@ -79,11 +97,38 @@ final class TeamsViewController: UIViewController {
         setUpBackGesture()
         setUpLoadingView()
 
-        loadTeams()
+        // Session cookies (MSAL's cache key among them) must be back before
+        // Teams starts, or it cannot read its stored tokens.
+        loadingView.isHidden = false
+        sessionCookies?.restore { [weak self] in self?.loadTeams() }
+        // If iOS did not restart the app after the setting changed, reload so
+        // Teams retries its silent renewal with the new cookie policy.
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.reloadAfterSettings else { return }
+            self.reloadAfterSettings = false
+            self.authAlertShown = false
+            self.loadTeams(reason: "auth-settings")
+        }
     }
 
     deinit {
         UIApplication.shared.isIdleTimerDisabled = false
+        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
+    }
+
+    /// Debug-only memory experiments: launch with `-OTDisable keepalive,shell`
+    /// to leave page scripts out. Release builds always install every script.
+    private static func scriptEnabled(_ name: String) -> Bool {
+        #if DEBUG
+        let disabled = (UserDefaults.standard.string(forKey: "OTDisable") ?? "").split(separator: ",")
+        if disabled.contains(Substring(name)) || disabled.contains("all") {
+            print("[DEBUG] page script disabled: \(name)")
+            return false
+        }
+        #endif
+        return true
     }
 
     // MARK: Layout
@@ -376,6 +421,8 @@ extension TeamsViewController: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        // Sites opened as pages (main view or popup) keep their own cookies.
+        cookieFilter?.noteFirstParty(webView.url)
         guard webView === self.webView else { return }
         print("[NAV] commit app=\(UIApplication.shared.applicationState.rawValue)")
         // A new page: Teams reports its state again once it has loaded.
@@ -396,6 +443,7 @@ extension TeamsViewController: WKNavigationDelegate {
         // rather than leaving a blank screen.
         if webView === self.webView {
             print("[NAV] web content process terminated app=\(UIApplication.shared.applicationState.rawValue)")
+            BackgroundKeepAlive.log("web content process terminated; reloading")
             keepAlive.callInProgress = false
             UIApplication.shared.isIdleTimerDisabled = false
             // Reload once automatically; if the process keeps dying, ask the
@@ -554,6 +602,32 @@ extension TeamsViewController: WKDownloadDelegate {
 // MARK: - ShellBridgeDelegate
 
 extension TeamsViewController: ShellBridgeDelegate {
+    /// Teams' silent renewal runs in a hidden login.microsoftonline.com frame,
+    /// where WebKit's tracking prevention blocks the Microsoft sign-in cookie.
+    /// "Allow Cross-Website Tracking" (NSCrossWebsiteTrackingUsageDescription)
+    /// lifts that for this app. Explain once per launch and open Settings.
+    func shellBridgeAuthRequired(_ bridge: ShellBridge) {
+        guard !authAlertShown, presentedViewController == nil else { return }
+        authAlertShown = true
+        print("[SESSION] Teams requires sign-in; offering cross-website tracking setting")
+        let alert = UIAlertController(
+            title: String(localized: "Teams can't renew your sign-in"),
+            message: String(localized: """
+                Microsoft renews your session in the background through its sign-in page, which iOS blocks \
+                in apps by default. In Settings, turn on Allow Cross-Website Tracking for Open Teams, \
+                then come back.
+                """),
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: String(localized: "Not Now"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Open Settings"), style: .default) { [weak self] _ in
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+            self?.reloadAfterSettings = true
+            UIApplication.shared.open(url)
+        })
+        presenter.present(alert, animated: true)
+    }
+
     func shellBridge(_ bridge: ShellBridge, didUpdate state: ShellState) {
         if let themeColor = state.themeColor {
             apply(themeColor: themeColor)

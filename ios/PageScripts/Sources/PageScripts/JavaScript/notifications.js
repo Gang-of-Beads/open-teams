@@ -102,7 +102,11 @@
     value: Object.freeze({
       click(id) {
         const stub = tracked.get(id);
-        if (stub) dispatch(stub, "click");
+        if (!stub) return;
+        // Tells the shell a conversation was opened on purpose, so it does
+        // not return to the list after a cold start.
+        document.dispatchEvent(new Event("openteams:notification-open"));
+        dispatch(stub, "click");
       },
     }),
   });

@@ -150,7 +150,11 @@ this to one year.
   page still runs on WebKit, so Chromium-only features may misbehave. The
   desktop layout is used on both iPhone and iPad; it is most usable on iPad or
   iPhone in landscape.
-- Cookies and site data persist across launches, so you stay signed in.
+- Cookies and site data persist across launches, and Microsoft session
+  cookies are restored after an app restart (see "Sign-in, cookies and
+  memory"), so you stay signed in.
+- After a cold start Teams reopens the last conversation; the app returns to
+  the Chat list once, unless a notification tap or a touch opened it.
 - Sign-in and consent popups open in a sheet inside the app. Links to
   non-Microsoft sites open in Safari; `msteams:`, `mailto:` and `tel:` links
   are handed to the system.
@@ -177,8 +181,9 @@ Teams.
 iOS normally suspends a web view about a second after the app leaves the
 foreground, which would stop Teams and all notifications. To keep it running,
 the page plays an inaudible tone (30 Hz at -80 dBFS, generated with Web Audio
-and played through a MediaStream) and the app declares the `audio` background
-mode. Routing it through a MediaStream keeps it out of Now Playing, so there
+at 8 kHz mono and played through a MediaStream) and the app declares the
+`audio` background mode. The default 48 kHz stereo graph measured ~390 MB of
+extra web process memory on device. Routing it through a MediaStream keeps it out of Now Playing, so there
 is no media player on the lock screen or in Control Center. Things to know:
 
 - **Battery**: Teams keeps running in the background, so expect noticeably
@@ -258,6 +263,47 @@ not a verified fix for recurring sign-in prompts: MFA, revoked sessions and
 tenant sign-in frequency still require interactive authentication. Long-running
 session behaviour needs device verification.
 
+## Sign-in, cookies and memory
+
+Measured on an iPhone 17 Pro with Web Inspector, Instruments and the system
+log. Details and figures are in the commit history.
+
+- **Session cookies survive restarts.** Teams' MSAL token cache is encrypted
+  with a key in a session cookie (`msal.cache.encryption`). WebKit keeps
+  session cookies in memory only, so every full app restart made the cache
+  unreadable and Teams asked to sign in again. Session cookies of trusted
+  Microsoft hosts are saved to the Keychain (this device only, after first
+  unlock) when the app leaves the foreground and restored before Teams
+  loads. Entries older than 14 days are dropped; only counts are logged.
+- **Allow Cross-Website Tracking.** Teams renews sign-in in a hidden
+  `login.microsoftonline.com` frame, where WebKit's tracking prevention
+  blocks the Microsoft sign-in cookie (`interaction_required`, "We need you
+  to sign in again", and the banner's Sign in does nothing). The app declares
+  `NSCrossWebsiteTrackingUsageDescription`; turn the switch on under
+  Settings > Open Teams. When Teams shows its sign-in banner, the app explains
+  this once and offers Open Settings, then reloads Teams on return.
+- **Cookie policy, narrowed to Microsoft.** Teams' media gateway
+  (`*.asyncgw.teams.microsoft.com`: custom emoji, images) sets its own cookies
+  (`skypetoken_asm`, user-scoped `authtoken_asm`) from cross-site requests,
+  which the default `onlyFromMainDocumentDomain` policy rejects, so every
+  custom emoji showed a placeholder (HTTP 401). The app accepts cookies
+  always and `ThirdPartyCookieFilter` deletes, as soon as WebKit reports them,
+  cookies of any domain that is neither a trusted Microsoft host nor a site
+  opened as a page (for example a federated sign-in provider). iOS has no
+  per-domain policy; a filtered cookie exists only until the store observer
+  runs.
+- **Web process memory.** Teams' web process sits near the per-process limit
+  (jetsam `per-process-limit` kills were observed, mostly when returning to
+  the foreground, followed by an automatic reload). Teams alone measured
+  ~1.26 GB; the shell's whole-document MutationObserver added ~370 MB and the
+  48 kHz keep-alive graph ~390 MB. The shell now polls a few elements every
+  500 ms while visible (nothing while hidden) and the keep-alive runs at
+  8 kHz mono. The reduction still needs a repeat measurement.
+- Debug builds only: `-OTDisable notifications,keepalive,media,calls,shell`
+  (or `all`) leaves page scripts out and `-OTLegacy shell,keepalive` selects
+  the previous implementations, for memory comparisons without reinstalling.
+  Debug builds also log media gateway cookie names, paths and sizes.
+
 ## Known limitations
 
 - **Notifications need the app running.** They come from the Teams page
@@ -331,6 +377,8 @@ The existing `npm run lint` now also checks the standalone script files.
 | `OpenTeams/SessionMaintenance.swift` | Network-failure recovery and Teams-owned silent session maintenance |
 | `OpenTeams/WeakScriptMessageHandler.swift` | Breaks the retain cycle between WebKit and the script message handlers |
 | `OpenTeams/CookiePathFixer.swift` | Copies Teams cookies with a relative path to `/` so profile pictures load |
+| `OpenTeams/SessionCookiePersistence.swift` | Saves Microsoft session cookies to the Keychain and restores them at launch |
+| `OpenTeams/ThirdPartyCookieFilter.swift` | Keeps cookies only for Microsoft hosts and sites opened as pages |
 | `OpenTeams/BackgroundKeepAlive.swift` | Inaudible MediaStream tone that keeps the page running in the background without a Now Playing entry |
 | `Config/Info.plist` | Keys build settings cannot generate (`UIBackgroundModes`) |
 | `Config/Signing.xcconfig` | Signing defaults, includes the optional `Local.xcconfig` |
