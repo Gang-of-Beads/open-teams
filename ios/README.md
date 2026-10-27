@@ -108,8 +108,9 @@ this to one year.
   "..." button) on the synthetic hover WebKit sends for a touch, and WebKit
   then drops the click, so rows needed two taps. Finger-generated hover events
   are not delivered to Teams (a real mouse or trackpad still hovers), except
-  inside the conversation's message list, where hover is what shows a
-  message's action bar (reactions, Reply/quote). Where
+  inside a message's action bar (reactions, Reply/quote). There, a tap keeps
+  focus on the message: iOS does not focus tapped buttons, and Teams closes
+  the bar as soon as the message loses focus. Where
   WebKit still holds the click for CSS hover/focus changes, a clean single
   tap that got no click within 90 ms is clicked once; a late native click for
   that tap is swallowed. Moves, long presses, text fields and taps that stop a
