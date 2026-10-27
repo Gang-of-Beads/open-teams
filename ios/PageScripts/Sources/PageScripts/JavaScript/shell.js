@@ -35,12 +35,25 @@
   // device: no mousedown/mouseup/click on the first tap). Finger-generated
   // hover events are not delivered to Teams; clicks, focus and pointer
   // events are. A real mouse or trackpad (iPad) still gets hover.
+  //
+  // A message's action bar (quick reactions, Reply/quote, "...") opens when a
+  // tap focuses the message, as a popover on <body>. Inside it hover is
+  // delivered as on desktop. iOS does not focus a tapped button, so mousedown
+  // there moved focus from the message to <body>; Teams closed the bar on
+  // that focusout and the click never came (verified on device). Preventing
+  // that mousedown keeps focus on the message; the click still follows.
+  const inActionBar = (target) => Boolean(target?.closest?.('[data-tid="message-actions-container"]'));
   let touchPointer = false;
   for (const type of ["pointerover", "pointerdown"]) {
     addEventListener(type, (event) => { touchPointer = event.pointerType === "touch"; }, true);
   }
+  addEventListener("mousedown", (event) => {
+    if (touchPointer && inActionBar(event.target)) event.preventDefault();
+  }, true);
   for (const type of ["mouseover", "mouseenter", "mousemove", "mouseout", "mouseleave"]) {
-    addEventListener(type, (event) => { if (touchPointer) event.stopImmediatePropagation(); }, true);
+    addEventListener(type, (event) => {
+      if (touchPointer && !inActionBar(event.target)) event.stopImmediatePropagation();
+    }, true);
   }
 
   // WebKit can still hold the click for its "hover first" heuristic when
