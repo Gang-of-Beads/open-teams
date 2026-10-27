@@ -107,7 +107,9 @@ this to one year.
 - **One tap, one action**: Teams' desktop layout shows hover UI (a row's
   "..." button) on the synthetic hover WebKit sends for a touch, and WebKit
   then drops the click, so rows needed two taps. Finger-generated hover events
-  are not delivered to Teams (a real mouse or trackpad still hovers). Where
+  are not delivered to Teams (a real mouse or trackpad still hovers), except
+  inside the conversation's message list, where hover is what shows a
+  message's action bar (reactions, Reply/quote). Where
   WebKit still holds the click for CSS hover/focus changes, a clean single
   tap that got no click within 90 ms is clicked once; a late native click for
   that tap is swallowed. Moves, long presses, text fields and taps that stop a

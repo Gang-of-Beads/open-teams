@@ -35,12 +35,18 @@
   // device: no mousedown/mouseup/click on the first tap). Finger-generated
   // hover events are not delivered to Teams; clicks, focus and pointer
   // events are. A real mouse or trackpad (iPad) still gets hover.
+  // Messages are the exception: their action bar (quick reactions, the "..."
+  // menu with Reply/quote) only appears on hover, so a tap on a message must
+  // still hover it. A held click there is covered by the tap fallback below.
+  const hoverTarget = (target) => Boolean(target?.closest?.('[data-tid="chat-pane-list"]'));
   let touchPointer = false;
   for (const type of ["pointerover", "pointerdown"]) {
     addEventListener(type, (event) => { touchPointer = event.pointerType === "touch"; }, true);
   }
   for (const type of ["mouseover", "mouseenter", "mousemove", "mouseout", "mouseleave"]) {
-    addEventListener(type, (event) => { if (touchPointer) event.stopImmediatePropagation(); }, true);
+    addEventListener(type, (event) => {
+      if (touchPointer && !hoverTarget(event.target)) event.stopImmediatePropagation();
+    }, true);
   }
 
   // WebKit can still hold the click for its "hover first" heuristic when
