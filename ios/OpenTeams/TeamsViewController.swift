@@ -74,6 +74,15 @@ final class TeamsViewController: UIViewController {
         if Self.scriptEnabled("media") { mediaBridge.install(in: controller) }
         if Self.scriptEnabled("calls") { callBridge.install(in: controller) }
         if Self.scriptEnabled("shell") { shellBridge.install(in: controller) }
+        if Self.scriptEnabled("appcaching") {
+            // Hosted apps (Calendar, OneDrive, Copilot) load when opened and
+            // unload when left, via Teams' own settings (see appCaching.js).
+            controller.addUserScript(WKUserScript(
+                source: BundledScript.appCaching.source,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
         webView = makeWebView(configuration: configuration)
         // The outer page does not scroll; Teams scrolls its own panes. Without
         // this the whole app rubber-bands like a web page.

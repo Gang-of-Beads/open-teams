@@ -141,6 +141,9 @@ this to one year.
 - The native startup screen is only shown for explicit loads/retries and web
   process recovery, not ordinary in-session document navigation. Its initial
   stall retry does not run during a call or on sign-in pages.
+- Hosted apps (Calendar, OneDrive, Copilot) load when they are opened, not
+  at startup, and are unloaded when you leave them (see "Memory budget"), so
+  returning to one takes a few seconds.
 - Downloaded files open in Quick Look (with its share button); anything it
   cannot preview goes to the share sheet.
 - Notifications show the sender's picture as a thumbnail when Teams provides
@@ -297,17 +300,125 @@ log. Details and figures are in the commit history.
   provider; at most 50 are remembered). iOS has no
   per-domain policy; a filtered cookie exists only until the store observer
   runs.
-- **Web process memory.** Teams' web process sits near the per-process limit
-  (jetsam `per-process-limit` kills were observed, mostly when returning to
-  the foreground, followed by an automatic reload). Teams alone measured
-  ~1.26 GB; the shell's whole-document MutationObserver added ~370 MB and the
-  48 kHz keep-alive graph ~390 MB. The shell now polls a few elements every
-  500 ms while visible (nothing while hidden) and the keep-alive runs at
-  8 kHz mono. The reduction still needs a repeat measurement.
-- Debug builds only: `-OTDisable notifications,keepalive,media,calls,shell`
+- **Web process memory.** See [Memory budget](#memory-budget): the web
+  content process has a hard 2 GB limit and Teams uses most of it.
+- Debug builds only: `-OTDisable notifications,keepalive,media,calls,shell,appcaching`
   (or `all`) leaves page scripts out and `-OTLegacy shell,keepalive` selects
   the previous implementations, for memory comparisons without reinstalling.
   Debug builds also log media gateway cookie names, paths and sizes.
+
+## Memory budget
+
+> [!IMPORTANT]
+> Check this budget for every change to the app (page scripts, web view
+> configuration, CallKit/media code) and after Teams web changes noticeably.
+> Exceeding it does not crash the app: iOS kills the web content process,
+> the app reloads Teams, and any call in progress ends.
+
+Measured on an iPhone 17 Pro, iOS 27.0.1 (RunningBoard's `Memory Limits`
+log lines):
+
+| Process | Limit |
+| --- | --- |
+| `com.apple.WebKit.WebContent` (Teams page) | **2048 MB, hard** |
+| `com.apple.WebKit.GPU` | 600 MB active / 400 MB inactive, soft |
+| `com.apple.WebKit.Networking` | 840 MB, soft |
+| App process | 6144 MB with `com.apple.developer.kernel.increased-memory-limit` |
+
+The increased-memory-limit entitlement raises only the app process; the
+WebContent extension stays at 2048 MB, so it does not help here. The app
+cannot read the web process footprint itself: `proc_pid_rusage` on WebKit's
+web process fails with `EPERM` in the app sandbox.
+
+### Where it goes
+
+WebContent footprint after a cold start, idle, no call (Instruments Activity
+Monitor; Web Inspector `Memory` domain for the breakdown):
+
+| State | Footprint |
+| --- | --- |
+| Teams' default caching (Calendar precached) | 1.5-1.7 GB (JS 575 MB, JIT 74 MB, page/WebCore 1030 MB) |
+| Same, after opening OneDrive and Copilot | 1.82 GB, then killed (no call) |
+| Caching off (`appCaching.js`), idle | 1.1-1.4 GB (JS 365 MB, JIT 45 MB, page/WebCore 691 MB) |
+| Caching off, after opening and leaving Calendar, OneDrive and Copilot (twice) | 1.44-1.51 GB |
+| Teams without page scripts (`-OTDisable all`) | ~1.5 GB (Calendar precached) |
+
+Calls and Store are part of Teams' own app (no iframe) and leave nothing
+behind when left.
+
+- **Hosted apps are not precached or kept cached.** Teams shows Calendar,
+  OneDrive, Copilot and similar apps in hidden cached iframes
+  (`data-inp="cacheable-iframe"`, under `persisted-app-content-main`). It
+  precaches Calendar at startup (ECS `core.enableAppPreCaching`,
+  `extensibility.appPrecachingOptInAppList`) and keeps every opened app
+  cached after it is left (up to 2 for Copilot). Each is a whole web app
+  (Outlook with its `DataWorker`, SharePoint, Copilot) in the same web
+  content process. `appCaching.js` writes `core.enableAppPreCaching=false`,
+  `extensibility.enableAppCachingNS=false` and
+  `extensibility.enableAppCachinginMainContentNS=false` to Teams' own
+  localStorage settings override (`tmp.settings`, merged over ECS and policy
+  in production builds) before Teams starts. Teams then loads a hosted app
+  when it is opened and removes its iframe when it is left.
+- These are Teams-internal setting names (Teams web build of November 2026).
+  After Teams updates, check that no `cacheable-iframe` exists at startup or
+  after leaving Calendar, OneDrive or Copilot (step 5 below). Rejected
+  alternatives: holding back the iframe `src` works for Calendar and OneDrive
+  but not Copilot, which Teams loads by posting a form (with an
+  `Authorization` field) into the frame; blanking that frame left Copilot on
+  Teams' `platform-error` page.
+- Of the remaining footprint, Teams' telemetry worker is ~5 MB, the DOM is
+  small (~2.5k nodes) and images/layers live in the GPU process. The rest is
+  Teams' own code and data: its main-thread JS heap, its data worker and
+  WebCore memory for 200+ script bundles. WebKit's memory-pressure handling
+  released almost nothing (0.5 MB) in a logged system pressure event.
+- Our other scripts are within measurement noise (about +-100 MB between
+  runs of the same build). Earlier fixes: a whole-document MutationObserver
+  in the shell cost ~370 MB and a 48 kHz keep-alive graph ~390 MB.
+- A call, returning to the foreground and switching apps each add a spike
+  of several hundred MB on top of the idle footprint. Kills were observed
+  at 1.84 GB idle (accepting a call) and on returning to the foreground.
+
+### Recognizing a memory kill
+
+The app logs `[NAV] web content process terminated`. The device log
+(collect with `pymobiledevice3 syslog collect`; `log collect --device` needs
+root) shows:
+
+```text
+launchd: [pid/<app>/com.apple.WebKit.WebContent... [<pid>]:] exited with exit reason
+  (namespace: 1 code: 0x7) - JETSAM_REASON_MEMORY_PERPROCESSLIMIT
+ReportSystemMemory: Process com.apple.WebKit.WebContent [<pid>] killed by jetsam reason per-process-limit
+```
+
+A `JetsamEvent` report is often missing (`Log limit exceeded`), and no crash
+report is written, so the device log is the reliable source.
+
+### Measuring before a release
+
+1. Install a Debug build and launch it fresh, with the page scripts under
+   test enabled and, for comparison, disabled (`-OTDisable <names>`):
+   `xcrun devicectl device process launch --console --terminate-existing -d <udid> <bundle-id> -- -OTDisable appcaching`.
+   Teams keeps `tmp.settings` in localStorage, so to measure without
+   `appCaching.js`, also remove it once from Web Inspector
+   (`localStorage.removeItem("tmp.settings")`) and relaunch.
+2. Sample the WebContent footprint every ~30 s for at least 5 minutes
+   (Teams preloads some content minutes after startup):
+   `xcrun xctrace record --template 'Activity Monitor' --device <udid> --all-processes --time-limit 3s --output s.trace`,
+   then `xcrun xctrace export` the `activity-monitor-process-live` table.
+3. For a breakdown, attach Web Inspector (Safari > Develop, or the
+   `Memory` domain through `pymobiledevice3 webinspector`) and read the
+   javascript / jit / page / images / layers categories. Do not take a heap
+   snapshot of Teams' data worker or the main page: building it pushed the
+   page over the limit and got it killed.
+4. Compare like with like. Without the shell's ready report, the native
+   40 s startup-stall timer reloads the page, and a reloaded page measures
+   several hundred MB lower than a first load. Check the console log for
+   `reload reason=startup-stall` before trusting a low number.
+5. Open and leave Calendar, OneDrive and Copilot; no
+   `iframe[data-inp="cacheable-iframe"]` may remain afterwards or exist
+   after startup.
+6. Keep the idle footprint well below 2048 MB (target: under ~1.5 GB), then
+   accept a call and return from the background once while sampling.
 
 ## Known limitations
 
@@ -368,7 +479,7 @@ The existing `npm run lint` now also checks the standalone script files.
 | `PageScripts/Package.swift` | Local package: script library, build plugin and Swift generator |
 | `PageScripts/Plugins/EmbedScriptsPlugin/` | SwiftPM Build Tool Plugin with incremental input/output declarations |
 | `PageScripts/Sources/EmbedScriptsGenerator/` | Host-side Swift JS-to-Swift generator |
-| `PageScripts/Sources/PageScripts/JavaScript/*.js` | Notification, call, media, navigation, viewport, session and keep-alive scripts |
+| `PageScripts/Sources/PageScripts/JavaScript/*.js` | Notification, call, media, navigation, viewport, session, keep-alive and hosted-app caching scripts |
 | `OpenTeams/TeamsViewController.swift` | Web view setup, navigation, popups, permissions, downloads |
 | `OpenTeams/PopupViewController.swift` | Sheet used for `window.open()` popups |
 | `OpenTeams/TeamsConfig.swift` | Start URL, user agent and trusted Microsoft hosts |

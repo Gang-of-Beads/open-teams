@@ -211,6 +211,10 @@ if (modulesRequiringIpc.includes(module.name)) {
 - Test tray icon functionality and MQTT status publishing thoroughly after any changes to module initialization
 - Reference this documentation if unclear why these modules need special handling
 
+## iOS App (`ios/`)
+
+The iOS app is a separate Swift/WKWebView wrapper (see `ios/README.md`). Teams' web content process runs close to iOS' hard 2048 MB per-process limit; exceeding it kills the page and ends any call. **Every change to the iOS app must be checked against the "Memory budget" section of `ios/README.md`**, measured on a device as described there, and the figures in that section updated when they change.
+
 ## AI Workflow Instructions
 
 - Always run tests and linting before commits
