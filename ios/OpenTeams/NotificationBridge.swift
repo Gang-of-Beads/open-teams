@@ -15,6 +15,8 @@ final class NotificationBridge: NSObject {
     static let handlerName = "openTeamsNotifications"
 
     weak var webView: WKWebView?
+    /// A notification was tapped; the Teams page is about to show it.
+    var onOpen: (() -> Void)?
     private let center = UNUserNotificationCenter.current()
 
     private struct PendingNotification {
@@ -143,6 +145,7 @@ final class NotificationBridge: NSObject {
               let data = try? JSONSerialization.data(withJSONObject: [id]),
               let argument = String(data: data, encoding: .utf8)
         else { return }
+        onOpen?()
         // argument is a JSON array, so the id is passed as data, never as code.
         webView.evaluateJavaScript("window.__openTeamsNotifications?.click(...\(argument))")
     }

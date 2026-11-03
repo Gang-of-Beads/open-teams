@@ -22,6 +22,9 @@ final class TeamsViewController: UIViewController {
     private let mediaBridge = MediaBridge()
     private let sessionMaintenance = SessionMaintenance()
     private let shellBridge = ShellBridge()
+    /// Calendar, OneDrive and Copilot in a web view (and process) of their
+    /// own; see AppsWebView.
+    private let apps = AppsWebView()
     private var callManager: CallManager?
     private var cookieMonitor: CookieStoreMonitor?
     private var sessionCookies: SessionCookiePersistence?
@@ -30,6 +33,8 @@ final class TeamsViewController: UIViewController {
     /// Set when Settings was opened for sign-in; retry renewal on return.
     private var reloadAfterSettings = false
     private var settingsObserver: NSObjectProtocol?
+    private var backgroundObserver: NSObjectProtocol?
+    private var foregroundObserver: NSObjectProtocol?
 
     private let tabBar = UITabBar()
     private var lastChatTap: TimeInterval?
@@ -44,7 +49,6 @@ final class TeamsViewController: UIViewController {
     private static let tabItems: [(TeamsTab, String, String)] = [
         (.activity, String(localized: "Activity"), "bell"),
         (.chat, String(localized: "Chat"), "bubble.left.and.bubble.right"),
-        (.calendar, String(localized: "Calendar"), "calendar"),
         (.calls, String(localized: "Calls"), "phone"),
         (.more, String(localized: "More"), "ellipsis"),
     ]
@@ -95,7 +99,17 @@ final class TeamsViewController: UIViewController {
         shellBridge.webView = webView
         shellBridge.delegate = self
         callManager = CallManager(bridge: callBridge, keepAlive: keepAlive, notifications: notificationBridge)
+        callManager?.onIncoming = { [weak self] in self?.showTeams() }
+        notificationBridge.onOpen = { [weak self] in self?.showTeams() }
+        apps.presenter = { [weak self] in self?.presenter ?? UIViewController() }
+        apps.onTeamsLink = { [weak self] url in
+            guard let self else { return }
+            self.showTeams()
+            self.webView.load(URLRequest(url: url))
+            self.showLoading()
+        }
         mediaBridge.onCallActivity = { [weak self] active in
+            if active { self?.showTeams() }
             self?.keepAlive.callInProgress = active
             self?.callManager?.webRTCActivityChanged(active)
             UIApplication.shared.isIdleTimerDisabled = active
@@ -122,11 +136,40 @@ final class TeamsViewController: UIViewController {
             self.authAlertShown = false
             self.loadTeams(reason: "auth-settings")
         }
+        // The apps web view is released in the background, so only Teams
+        // stays resident, and reloaded on return if it was on screen.
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.apps.suspend() }
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.apps.resume() }
     }
 
     deinit {
         UIApplication.shared.isIdleTimerDisabled = false
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
+        if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
+        if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+    }
+
+    /// Brings the Teams page back over an app: a notification was tapped,
+    /// a call rings or connects, or an app opened a Teams link.
+    private func showTeams() {
+        guard apps.isShown else { return }
+        apps.hide()
+        selectTabItem(for: shellBridge.state.activeTab)
+    }
+
+    /// Selects the tab bar item for a destination. Teams apps without a tab
+    /// of their own (its Calendar, opened from "Other Teams Apps") are under
+    /// More.
+    private func selectTabItem(for tab: TeamsTab) {
+        let index = Self.tabItems.firstIndex { $0.0 == tab }
+            ?? Self.tabItems.firstIndex { $0.0 == .more }
+        if let index, let items = tabBar.items, index < items.count {
+            tabBar.selectedItem = items[index]
+        }
     }
 
     /// Debug-only memory experiments: launch with `-OTDisable keepalive,shell`
@@ -149,6 +192,8 @@ final class TeamsViewController: UIViewController {
         tabBar.translatesAutoresizingMaskIntoConstraints = false
         loadingView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
+        apps.container.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(apps.container)
         view.addSubview(tabBar)
         view.addSubview(loadingView)
 
@@ -163,6 +208,11 @@ final class TeamsViewController: UIViewController {
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             webView.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor),
             fill,
+
+            apps.container.topAnchor.constraint(equalTo: webView.topAnchor),
+            apps.container.leadingAnchor.constraint(equalTo: webView.leadingAnchor),
+            apps.container.trailingAnchor.constraint(equalTo: webView.trailingAnchor),
+            apps.container.bottomAnchor.constraint(equalTo: webView.bottomAnchor),
 
             tabBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -664,9 +714,47 @@ extension TeamsViewController: ShellBridgeDelegate {
             let count = state.badges[entry.0] ?? 0
             items[index].badgeValue = count > 0 ? (count > 99 ? "99+" : String(count)) : nil
         }
-        if let index = Self.tabItems.firstIndex(where: { $0.0 == state.activeTab }), index < items.count {
-            tabBar.selectedItem = items[index]
+        // While an app is shown, the selection stays on More.
+        if !apps.isShown {
+            selectTabItem(for: state.activeTab)
         }
+    }
+}
+
+// MARK: - More menu
+
+extension TeamsViewController {
+    /// Outlook mail and calendar, OneDrive and Copilot open in the apps web
+    /// view; anything else in Teams' own app list.
+    private func showMoreMenu() {
+        let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        for app in AppsWebView.App.allCases {
+            sheet.addAction(UIAlertAction(title: app.title, style: .default) { [weak self] _ in
+                self?.apps.show(app)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: String(localized: "Other Teams Apps"), style: .default) { [weak self] _ in
+            guard let self else { return }
+            // Teams' app list opens over the page; the selection stays on
+            // the current Teams app until Teams switches.
+            self.apps.hide()
+            self.shellBridge.select(.more)
+            self.restoreTabSelection()
+        })
+        sheet.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel) { [weak self] _ in
+            self?.restoreTabSelection()
+        })
+        if let popover = sheet.popoverPresentationController {
+            popover.sourceView = tabBar
+            popover.sourceRect = CGRect(x: tabBar.bounds.maxX - tabBar.bounds.width / 10, y: 0, width: 1, height: 1)
+        }
+        presenter.present(sheet, animated: true)
+    }
+
+    /// The tab bar selection after a cancelled More menu: the app or Teams
+    /// destination still on screen.
+    private func restoreTabSelection() {
+        selectTabItem(for: apps.isShown ? .more : shellBridge.state.activeTab)
     }
 }
 
@@ -676,7 +764,15 @@ extension TeamsViewController: UITabBarDelegate {
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
         guard Self.tabItems.indices.contains(item.tag) else { return }
         let tab = Self.tabItems[item.tag].0
-        let alreadySelected = shellBridge.state.activeTab == tab
+        if tab == .more {
+            lastChatTap = nil
+            lastChatTapWasSelected = false
+            showMoreMenu()
+            return
+        }
+        let fromApps = apps.isShown
+        apps.hide()
+        let alreadySelected = !fromApps && shellBridge.state.activeTab == tab
         let now = ProcessInfo.processInfo.systemUptime
         if tab == .chat {
             let doubleTap = alreadySelected && lastChatTapWasSelected &&
@@ -692,20 +788,9 @@ extension TeamsViewController: UITabBarDelegate {
             lastChatTap = nil
             lastChatTapWasSelected = false
         }
-        if tab == .more {
-            shellBridge.select(tab)
-
-            // "More" opens Teams' app list over the page; the selection stays
-            // on the current app until Teams switches.
-            let current = Self.tabItems.firstIndex { $0.0 == shellBridge.state.activeTab }
-            if let current, let items = tabBar.items, current < items.count {
-                tabBar.selectedItem = items[current]
-            }
-        } else {
-            // Always dispatch explicit tab taps. The page may still be
-            // resolving a destination or displaying an in-app detail view.
-            shellBridge.select(tab)
-        }
+        // Always dispatch explicit tab taps. The page may still be resolving
+        // a destination or displaying an in-app detail view.
+        shellBridge.select(tab)
     }
 }
 

@@ -89,8 +89,9 @@ this to one year.
 
 ## How it behaves
 
-- **Native shell around Teams**: a tab bar for Activity, Chat, Calendar, Calls
-  and More (Teams' other apps) with unread badges, the status bar area in Teams' title
+- **Native shell around Teams**: a tab bar for Activity, Chat, Calls and More
+  (Mail, Calendar, OneDrive, Copilot and Teams' other apps) with unread
+  badges, the status bar area in Teams' title
   bar color with light/dark following Teams' theme, a loading screen with
   automatic retry when Teams stalls, and a native error screen with Retry.
   Swipe from the left edge to go back from a chat. The page does not
@@ -141,9 +142,21 @@ this to one year.
 - The native startup screen is only shown for explicit loads/retries and web
   process recovery, not ordinary in-session document navigation. Its initial
   stall retry does not run during a call or on sign-in pages.
-- Hosted apps (Calendar, OneDrive, Copilot) load when they are opened, not
-  at startup, and are unloaded when you leave them (see "Memory budget"), so
-  returning to one takes a few seconds.
+- **Mail, Calendar, OneDrive and Copilot open outside Teams**, from the More
+  menu, in a second web view with its own web content process (see "Memory
+  budget"): Outlook's mail and calendar (`outlook.office.com/mail`,
+  `/calendar`), OneDrive (`office.com/launch/onedrive`, which redirects to
+  your own OneDrive) and Copilot (`m365.cloud.microsoft/chat`). "Other Teams
+  Apps" opens Teams' own app list. Only one of these apps is loaded at a time;
+  switching between them reloads. They share the Teams sign-in, so no extra login is
+  needed. Teams links opened there (meeting joins) are handed to Teams, which
+  reloads to open them. The Teams page comes back to the front when a
+  notification is tapped or a call rings or connects. The second web view is
+  released when the app goes to the background (an app that was on screen
+  reloads on return) and after 5 minutes hidden; opening an app again then
+  takes a few seconds.
+- Hosted apps opened inside Teams (from "Other Teams Apps", including Teams'
+  own Calendar) load when opened and are unloaded when left.
 - Downloaded files open in Quick Look (with its share button); anything it
   cannot preview goes to the share sheet.
 - Notifications show the sender's picture as a thumbnail when Teams provides
@@ -342,11 +355,26 @@ Monitor; Web Inspector `Memory` domain for the breakdown):
 | Caching off (`appCaching.js`), idle | 1.1-1.4 GB (JS 365 MB, JIT 45 MB, page/WebCore 691 MB) |
 | Caching off, after opening and leaving Calendar, OneDrive and Copilot (twice) | 1.44-1.51 GB |
 | Teams without page scripts (`-OTDisable all`) | ~1.5 GB (Calendar precached) |
+| Teams page with Mail / Calendar / OneDrive / Copilot open in the apps web view | 1.36-1.45 GB (unchanged) |
 
 Calls and Store are part of Teams' own app (no iframe) and leave nothing
 behind when left.
 
-- **Hosted apps are not precached or kept cached.** Teams shows Calendar,
+- **Mail, Calendar, OneDrive and Copilot use a second process.** Each WKWebView
+  gets its own web content process with its own 2048 MB hard limit
+  (verified in RunningBoard's log). `AppsWebView` opens these apps directly
+  instead of as Teams-hosted iframes, so they never count against the Teams
+  page: measured 507-548 MB (Mail, Calendar), 196-609 MB (OneDrive, Copilot)
+  in the apps process while the Teams page stayed at 1.36-1.45 GB. Each app
+  gets a fresh web view: loading the next app into the same one kept the
+  previous page in WebKit's back/forward cache, in another ~500 MB process. The apps process
+  can be killed on its own without affecting Teams or a call; it is
+  released (the process exits) in the background and after 5 minutes
+  hidden. WebKit may also keep a small prewarmed process (~80-180 MB).
+
+- **Hosted apps inside Teams are not precached or kept cached.** This still
+  matters for Teams' own Calendar precaching and for apps opened from "Other
+  Teams Apps". Teams shows Calendar,
   OneDrive, Copilot and similar apps in hidden cached iframes
   (`data-inp="cacheable-iframe"`, under `persisted-app-content-main`). It
   precaches Calendar at startup (ECS `core.enableAppPreCaching`,
@@ -414,9 +442,11 @@ report is written, so the device log is the reliable source.
    40 s startup-stall timer reloads the page, and a reloaded page measures
    several hundred MB lower than a first load. Check the console log for
    `reload reason=startup-stall` before trusting a low number.
-5. Open and leave Calendar, OneDrive and Copilot; no
-   `iframe[data-inp="cacheable-iframe"]` may remain afterwards or exist
-   after startup.
+5. Open and leave Calendar, OneDrive and Copilot inside Teams (More >
+   Other Teams Apps); no `iframe[data-inp="cacheable-iframe"]` may remain
+   afterwards or exist after startup. Open Mail, then Calendar from the More
+   menu: only one apps web content process may remain, and it must exit
+   after the app goes to the background.
 6. Keep the idle footprint well below 2048 MB (target: under ~1.5 GB), then
    accept a call and return from the background once while sampling.
 
@@ -481,6 +511,7 @@ The existing `npm run lint` now also checks the standalone script files.
 | `PageScripts/Sources/EmbedScriptsGenerator/` | Host-side Swift JS-to-Swift generator |
 | `PageScripts/Sources/PageScripts/JavaScript/*.js` | Notification, call, media, navigation, viewport, session, keep-alive and hosted-app caching scripts |
 | `OpenTeams/TeamsViewController.swift` | Web view setup, navigation, popups, permissions, downloads |
+| `OpenTeams/AppsWebView.swift` | Second web view (own process) for Outlook mail and calendar, OneDrive and Copilot |
 | `OpenTeams/PopupViewController.swift` | Sheet used for `window.open()` popups |
 | `OpenTeams/TeamsConfig.swift` | Start URL, user agent and trusted Microsoft hosts |
 | `OpenTeams/NotificationBridge.swift` | `window.Notification` shim, iOS notifications, app icon badge |

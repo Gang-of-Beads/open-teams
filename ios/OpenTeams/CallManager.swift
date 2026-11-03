@@ -52,6 +52,8 @@ final class CallManager: NSObject {
     /// Experimental: accept after CallKit activates audio, even while locked.
     private var answerPending = false
     private var audioActivated = false
+    /// A call started ringing; the Teams page should be on screen.
+    var onIncoming: (() -> Void)?
 
     init(bridge: CallBridge, keepAlive: BackgroundKeepAlive, notifications: NotificationBridge) {
         let configuration = CXProviderConfiguration()
@@ -138,6 +140,7 @@ final class CallManager: NSObject {
         let uuid = UUID()
         call = Call(uuid: uuid, phase: .ringing)
         Self.log("incoming call ringing")
+        onIncoming?()
         notifications.holdNotificationsForRingingCall()
         provider.reportNewIncomingCall(with: uuid, update: Self.update(name: name, number: number)) { [weak self] error in
             DispatchQueue.main.async {
