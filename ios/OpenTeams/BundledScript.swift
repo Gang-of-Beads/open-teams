@@ -5,6 +5,7 @@ import PageScripts
 /// The local PageScripts package's Build Tool Plugin generates the constants.
 /// No runtime bundle lookup or file I/O is involved.
 enum BundledScript: String {
+    case appCaching
     case backgroundKeepAlive
     case calls
     case diagnostics
@@ -16,6 +17,7 @@ enum BundledScript: String {
 
     var source: String {
         switch self {
+        case .appCaching: return EmbeddedScripts.appCaching
         case .backgroundKeepAlive: return EmbeddedScripts.backgroundKeepAlive
         case .calls: return EmbeddedScripts.calls
         case .diagnostics: return EmbeddedScripts.diagnostics
